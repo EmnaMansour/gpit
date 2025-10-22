@@ -1,0 +1,1 @@
+ 2tsXÚhr1frontend/src/components/modals/EquipmentModal.tsx

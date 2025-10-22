@@ -1,0 +1,1 @@
+ˆ 2tsXÇhr'frontend/src/components/HeroSection.tsx

@@ -1,0 +1,144 @@
+version: "3.9"
+
+services:
+  # Base de données MongoDB
+  mongo:
+    image: mongo:6
+    container_name: mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: emna
+      MONGO_INITDB_ROOT_PASSWORD: emna
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - app-network
+
+  # Backend Node.js
+  backend:
+    build: ./backend
+    container_name: backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    depends_on:
+      - mongo
+    ports:
+      - "8081:8000"
+    environment:
+      - MONGO_URI=mongodb://emna:emna@mongo:27017/pfe?authSource=admin
+      - NODE_ENV=production
+      - PORT=8000
+    networks:
+      - app-network
+
+  # Frontend Vite/React
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://backend:8000
+    networks:
+      - app-network
+
+  # Agent Python (envoie des métriques vers InfluxDB)
+  agent:
+    build: ./backend/agent
+    container_name: agent
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - influxdb
+    environment:
+      - API_INCIDENT=http://backend:8000/api/incidents
+      - BACKEND_URL=http://backend:8000
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_TOKEN=supersecrettoken
+      - INFLUX_ORG=gpit
+      - INFLUX_BUCKET=metrics
+    networks:
+      - app-network
+
+  # InfluxDB (base de données de métriques)
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdb
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=admin123
+      - DOCKER_INFLUXDB_INIT_ORG=gpit
+      - DOCKER_INFLUXDB_INIT_BUCKET=metrics
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=supersecrettoken
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    networks:
+      - app-network
+
+  # Grafana (visualisation des métriques)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    depends_on:
+      - influxdb
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - app-network
+
+  # Cypress pour tests E2E
+  cypress:
+    image: cypress/included:15.3.0
+    container_name: cypress
+    depends_on:
+      - frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    environment:
+      - CYPRESS_baseUrl=http://frontend:5173
+    entrypoint: ["sh", "-c"]
+    command: >
+      echo 'Waiting for frontend...';
+      until curl -s http://frontend:5173 > /dev/null; do sleep 2; done;
+      echo 'Frontend ready, starting Cypress in interactive mode';
+      npx cypress open;
+      tail -f /dev/null
+
+  # SonarQube pour la qualité du code
+  sonarqube:
+    image: sonarqube:community
+    container_name: sonarqube
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+    networks:
+      - app-network
+
+volumes:
+  mongo-data:
+  influxdb_data:
+  grafana_data:
+
+networks:
+  app-network:
+    driver: bridge

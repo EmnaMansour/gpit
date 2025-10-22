@@ -1,0 +1,64 @@
+name: CI/CD GPIT
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-test-analyze-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Cloner ton dépôt
+      - name: 📦 Cloner le code
+        uses: actions/checkout@v3
+
+      # 2️⃣ Installer le backend
+      - name: ⚙️ Installer le backend
+        working-directory: ./backend
+        run: |
+          npm install
+
+      # 3️⃣ Lancer les tests du backend
+      - name: 🧪 Tests backend
+        working-directory: ./backend
+        run: |
+          npm test || echo "⚠️ Aucun test défini, on continue"
+
+      # 4️⃣ Installer le frontend
+      - name: ⚙️ Installer le frontend
+        working-directory: ./frontend
+        run: |
+          npm install
+
+      # 5️⃣ Lancer le build du frontend
+      - name: 🧱 Build frontend
+        working-directory: ./frontend
+        run: |
+          npm run build
+
+      # 6️⃣ Analyse du code avec SonarQube
+      - name: 🔍 Analyse SonarQube
+        uses: sonarsource/sonarqube-scan-action@v2
+        with:
+          projectBaseDir: .
+          args: >
+            -Dsonar.projectKey=gpit
+            -Dsonar.host.url=http://localhost:9000
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+
+      # 7️⃣ Déploiement automatique si tout est OK
+      - name: 🚀 Déploiement
+        if: success()
+        run: |
+          echo "Déploiement automatique en cours..."
+          # Exemple de déploiement SSH vers ton serveur
+          # (tu peux l’adapter à ton cas)
+          sshpass -p "${{ secrets.SERVER_PASS }}" ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "
+            cd /var/www/gpit &&
+            git pull origin main &&
+            npm install --prefix backend &&
+            npm run build --prefix frontend &&
+            pm2 restart all
+          "

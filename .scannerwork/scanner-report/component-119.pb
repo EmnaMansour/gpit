@@ -1,0 +1,1 @@
+w 2jsX!hr"backend/routes/equipementRoutes.js

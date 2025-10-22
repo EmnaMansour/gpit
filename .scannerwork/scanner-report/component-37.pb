@@ -1,0 +1,1 @@
+% 2tsXhrbackend/cypress/support/e2e.ts

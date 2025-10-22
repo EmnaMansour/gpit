@@ -1,0 +1,40 @@
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: backend
+#   namespace: gpit
+# spec:
+#   replicas: 1
+#   selector:
+#     matchLabels:
+#       app: backend
+#   template:
+#     metadata:
+#       labels:
+#         app: backend
+#     spec:
+#       containers:
+#       - name: backend
+#         image: <ACCOUNT_ID>.dkr.ecr.eu-west-3.amazonaws.com/gpit-backend:latest
+#         ports:
+#         - containerPort: 8000
+#         env:
+#         - name: NODE_ENV
+#           value: production
+#         - name: PORT
+#           value: "8000"
+#         - name: MONGO_URI
+#           value: "mongodb+srv://emna:emna@cluster0.mongodb.net/pfe?retryWrites=true&w=majority"
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: backend-service
+#   namespace: gpit
+# spec:
+#   selector:
+#     app: backend
+#   ports:
+#   - port: 8000
+#     targetPort: 8000
+#   type: ClusterIP

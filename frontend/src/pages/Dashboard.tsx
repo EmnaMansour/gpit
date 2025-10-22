@@ -1,0 +1,1030 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  AlertCircle,
+  Users,
+  Wrench,
+  RefreshCw,
+  Activity,
+  TrendingUp,
+  Calendar,
+  Package,
+  CheckCircle
+} from 'lucide-react';
+
+type StatCardProps = {
+  icon: React.ReactNode;
+  title: string;
+  value: number;
+  gradient: string;
+  trend?: number;
+  loading?: boolean;
+};
+
+const StatCard: React.FC<StatCardProps> = ({ icon, title, value, gradient, trend, loading = false }) => {
+  const [animatedValue, setAnimatedValue] = useState(0);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    setIsVisible(true);
+    if (!loading) {
+      const timer = setTimeout(() => {
+        const duration = 1500;
+        const steps = 30;
+        const stepValue = value / steps;
+        let currentStep = 0;
+
+        const interval = setInterval(() => {
+          currentStep++;
+          setAnimatedValue(Math.min(Math.floor(stepValue * currentStep), value));
+          if (currentStep >= steps) {
+            clearInterval(interval);
+            setAnimatedValue(value);
+          }
+        }, duration / steps);
+
+        return () => clearInterval(interval);
+      }, 300);
+
+      return () => clearTimeout(timer);
+    }
+  }, [value, loading]);
+
+  return (
+    <div className={`group relative transform transition-all duration-500 ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
+      <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-700/30 hover:border-gray-600/50 transition-all duration-500 hover:scale-105 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <div className={`bg-gradient-to-br ${gradient} rounded-xl p-4 group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
+              <div className="text-white">
+                {loading ? <RefreshCw className="h-6 w-6 animate-spin" /> : icon}
+              </div>
+            </div>
+            <div className="ml-4">
+              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">{title}</h3>
+              <p className="text-3xl font-black text-white group-hover:text-blue-400 transition-colors duration-300">
+                {loading ? '---' : animatedValue.toLocaleString()}
+              </p>
+              {trend && (
+                <div className={`flex items-center mt-2 text-sm ${trend > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  <TrendingUp className={`h-4 w-4 mr-1 ${trend < 0 ? 'rotate-180' : ''}`} />
+                  <span>{Math.abs(trend)}%</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+type Incident = {
+  _id?: string;
+  id?: string;
+  title: string;
+  status: string;
+  priority: string;
+  date?: string;
+  createdAt?: string;
+  assignedTo?: string;
+  reportedBy?: string | { _id: string; name: string };
+};
+
+type User = {
+  _id?: string;
+  id?: string;
+  name: string;
+  role: string;
+  lastLogin?: string;
+  createdAt?: string;
+};
+
+type Equipment = {
+  _id: string;
+  name?: string;
+  nom?: string;
+  status?: string;
+  statut?: string;
+  type?: string;
+  assignedTo?: string;
+};
+
+type EquipmentStatus = {
+  status: string;
+  count: number;
+};
+
+type DashboardProps = {
+  userRole?: string;
+  currentUser?: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  authToken?: string;
+};
+
+const Dashboard: React.FC<DashboardProps> = ({ userRole = 'Employé', currentUser, authToken }) => {
+  const [visibleSections, setVisibleSections] = useState(new Set());
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  
+  const normalizedRole = userRole?.toLowerCase() || 'employé';
+  const isAdmin = normalizedRole === 'admin' || normalizedRole === 'administrateur';
+  const isTechnicien = normalizedRole === 'technicien';
+  const isEmploye = normalizedRole === 'employé' || normalizedRole === 'employe';
+  
+  type StatsType = {
+    totalEquipment: number;
+    assignedEquipment: number;
+    availableEquipment: number;
+    activeIncidents: number;
+    resolvedIncidents: number;
+    totalIncidents: number;
+    totalUsers: number;
+    adminCount: number;
+    technicienCount: number;
+    employeCount: number;
+    assignedIncidents: number;
+    reportedIncidents: number;
+    activeReportedIncidents: number;
+    resolvedReportedIncidents: number;
+  };
+
+  const [stats, setStats] = useState<StatsType>({
+    totalEquipment: 0,
+    assignedEquipment: 0,
+    availableEquipment: 0,
+    activeIncidents: 0,
+    resolvedIncidents: 0,
+    totalIncidents: 0,
+    totalUsers: 0,
+    adminCount: 0,
+    technicienCount: 0,
+    employeCount: 0,
+    assignedIncidents: 0,
+    reportedIncidents: 0,
+    activeReportedIncidents: 0,
+    resolvedReportedIncidents: 0,
+  });
+
+  const [recentIncidents, setRecentIncidents] = useState<Incident[]>([]);
+  const [recentUsers, setRecentUsers] = useState<User[]>([]);
+  const [ equipmentStatus,setEquipmentStatus] = useState<EquipmentStatus[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const API_BASE_URL = 'http://localhost:8000';
+
+  const getCleanToken = useCallback((): string => {
+    if (!authToken) {
+      console.log('[DASHBOARD] ⚠ Pas de token disponible');
+      return '';
+    }
+    
+    let cleanToken = authToken;
+    
+    if (cleanToken.startsWith('"') && cleanToken.endsWith('"')) {
+      cleanToken = cleanToken.slice(1, -1);
+    }
+    
+    if (cleanToken.startsWith('Bearer ')) {
+      cleanToken = cleanToken.substring(7);
+    }
+    
+    console.log('[DASHBOARD] ✓ Token nettoyé, longueur:', cleanToken.length);
+    return cleanToken;
+  }, [authToken]);
+
+  const getAuthHeaders = useCallback((): HeadersInit => {
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json'
+    };
+
+    const cleanToken = getCleanToken();
+    if (cleanToken) {
+      (headers as any)['Authorization'] = `Bearer ${cleanToken}`;
+      console.log('[DASHBOARD] ✓ Header Authorization défini');
+    }
+    
+    return headers;
+  }, [getCleanToken]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setVisibleSections(prev => new Set(prev).add(entry.target.id));
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+
+    document.querySelectorAll('[data-animate]').forEach((el) => {
+      observer.observe(el);
+    });
+
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePosition({ x: e.clientX, y: e.clientY });
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, []);
+
+  const normalizeToArray = useCallback((data: any): any[] => {
+    if (Array.isArray(data)) {
+      return data;
+    } else if (data && typeof data === 'object') {
+      if (Array.isArray(data.incidents)) {
+        return data.incidents;
+      } else if (Array.isArray(data.equipements)) {
+        return data.equipements;
+      } else if (Array.isArray(data.users)) {
+        return data.users;
+      } else if (Array.isArray(data.data)) {
+        return data.data;
+      } else if (Array.isArray(data.items)) {
+        return data.items;
+      } else {
+        return [data];
+      }
+    }
+    return [];
+  }, []);
+
+  const getReportedById = (reportedBy: string | User | null): string | null => {
+    if (!reportedBy) return null;
+    if (typeof reportedBy === 'string') return reportedBy;
+    if (typeof reportedBy === 'object' && reportedBy._id) return reportedBy._id;
+    return null;
+  };
+
+  // ✅ FONCTION CRITIQUE : Filtrer les incidents selon le rôle
+  const filterIncidentsByRole = useCallback((incidents: Incident[], currentUserId?: string): Incident[] => {
+    console.log('[DASHBOARD] 🔐 Filtrage pour rôle:', normalizedRole, 'user ID:', currentUserId);
+    
+    if (!Array.isArray(incidents)) {
+      console.warn('[DASHBOARD] ❌ incidents n\'est pas un tableau');
+      return [];
+    }
+    
+    if (!currentUserId) {
+      console.warn('[DASHBOARD] ⚠️ Pas d\'ID utilisateur fourni');
+      return isAdmin || isTechnicien ? incidents : [];
+    }
+    
+    let filteredIncidents: Incident[] = [];
+
+    if (isAdmin) {
+      filteredIncidents = incidents;
+      console.log('👑 Admin - Accès à TOUS les incidents:', incidents.length);
+    } else if (isTechnicien) {
+      filteredIncidents = incidents;
+      console.log(`🔧 Technicien - Accès à TOUS les incidents: ${incidents.length}`);
+    } else if (isEmploye) {
+      // ✅ EMPLOYÉ : Voir SEULEMENT ses propres incidents
+      filteredIncidents = incidents.filter(incident => {
+        const reportedById = getReportedById(incident.reportedBy);
+        const isOwnIncident = reportedById === currentUserId;
+        
+        if (isOwnIncident) {
+          console.log(`  ✓ Incident "${incident.title}" appartient à l'employé`);
+        }
+        
+        return isOwnIncident;
+      });
+      console.log(`👤 Employé - ${filteredIncidents.length} de MES incidents sur ${incidents.length} au total`);
+    } else {
+      console.warn(`⚠️ Rôle inconnu: ${normalizedRole}, comportement employé par défaut`);
+      filteredIncidents = incidents.filter(incident => {
+        const reportedById = getReportedById(incident.reportedBy);
+        return reportedById === currentUserId;
+      });
+    }
+
+    return filteredIncidents;
+  }, [normalizedRole, isAdmin, isTechnicien, isEmploye]);
+
+  // ✅ CALCUL DES STATS AVEC FILTRAGE
+  const calculateIncidentStats = useCallback((incidents: Incident[], currentUserId?: string) => {
+    console.log('[DASHBOARD] calculateIncidentStats - Calcul pour', incidents.length, 'incidents');
+    
+    if (!Array.isArray(incidents)) {
+      console.warn('[DASHBOARD] ❌ incidents n\'est pas un tableau');
+      return {
+        totalIncidents: 0,
+        activeIncidents: 0,
+        resolvedIncidents: 0,
+        reportedIncidents: 0,
+        activeReportedIncidents: 0,
+        resolvedReportedIncidents: 0,
+        assignedIncidents: 0
+      };
+    }
+    
+    // ✅ APPLIQUER LE FILTRAGE PAR RÔLE
+    const filteredIncidents = filterIncidentsByRole(incidents, currentUserId);
+    
+    console.log('[DASHBOARD] 📊 Stats calculées sur', filteredIncidents.length, 'incidents filtrés');
+    
+    const totalIncidents = filteredIncidents.length;
+    const activeIncidents = filteredIncidents.filter(i => 
+      i.status === 'Nouveau' || i.status === 'En cours'
+    ).length;
+    const resolvedIncidents = filteredIncidents.filter(i => 
+      i.status === 'Résolu'
+    ).length;
+
+    let reportedIncidents = 0;
+    let activeReportedIncidents = 0;
+    let resolvedReportedIncidents = 0;
+    let assignedIncidents = 0;
+
+    if (currentUserId) {
+      const reportedByUser = filteredIncidents.filter(incident => {
+        const reportedById = getReportedById(incident.reportedBy);
+        return reportedById === currentUserId;
+      });
+
+      reportedIncidents = reportedByUser.length;
+      activeReportedIncidents = reportedByUser.filter(i => 
+        i.status === 'Nouveau' || i.status === 'En cours'
+      ).length;
+      resolvedReportedIncidents = reportedByUser.filter(i => 
+        i.status === 'Résolu'
+      ).length;
+
+      assignedIncidents = filteredIncidents.filter(incident => 
+        incident.assignedTo === currentUserId
+      ).length;
+    }
+
+    return {
+      totalIncidents,
+      activeIncidents,
+      resolvedIncidents,
+      reportedIncidents,
+      activeReportedIncidents,
+      resolvedReportedIncidents,
+      assignedIncidents
+    };
+  }, [filterIncidentsByRole]);
+
+  const normalizeRole = useCallback((role?: string) =>
+    role
+      ? role.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+      : ''
+  , []);
+
+  const calculateUserStats = useCallback((users: User[]) => {
+    if (!Array.isArray(users)) {
+      return {
+        totalUsers: 0,
+        adminCount: 0,
+        technicienCount: 0,
+        employeCount: 0,
+      };
+    }
+    
+    const totalUsers = users.length;
+    let adminCount = 0;
+    let technicienCount = 0;
+    let employeCount = 0;
+
+    users.forEach(user => {
+      const role = normalizeRole(user.role);
+      if (role === 'admin' || role === 'administrateur') adminCount++;
+      else if (role === 'technicien') technicienCount++;
+      else if (role === 'employe') employeCount++;
+    });
+
+    return {
+      totalUsers,
+      adminCount,
+      technicienCount,
+      employeCount,
+    };
+  }, [normalizeRole]);
+
+  const calculateEquipmentStats = useCallback((equipment: Equipment[], currentUserId?: string) => {
+    if (!Array.isArray(equipment)) {
+      return {
+        totalEquipment: 0,
+        assignedEquipment: 0,
+        availableEquipment: 0
+      };
+    }
+    
+    const totalEquipment = equipment.length;
+    
+    let assignedEquipment = 0;
+    let availableEquipment = 0;
+
+    if (currentUserId && isEmploye) {
+      assignedEquipment = equipment.filter(eq => {
+        const status = eq.statut || eq.status || '';
+        const isAssigned = status === 'Assigné' && eq.assignedTo === currentUserId;
+        return isAssigned;
+      }).length;
+    } else {
+      assignedEquipment = equipment.filter(eq => {
+        const status = eq.statut || eq.status || '';
+        return status === 'Assigné';
+      }).length;
+      
+      availableEquipment = equipment.filter(eq => {
+        const status = eq.statut || eq.status || '';
+        return status === 'Disponible';
+      }).length;
+    }
+
+    return {
+      totalEquipment,
+      assignedEquipment,
+      availableEquipment
+    };
+  }, [isEmploye]);
+
+  const calculateEquipmentStatsData = useCallback((equipment: Equipment[]): EquipmentStatus[] => {
+    if (!Array.isArray(equipment)) {
+      return [];
+    }
+    
+    const statusCounts: { [status: string]: number } = {};
+    
+    equipment.forEach((eq) => {
+      const status = eq.statut || eq.status || 'Opérationnel';
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
+
+    return Object.entries(statusCounts).map(([status, count]) => ({
+      status,
+      count
+    }));
+  }, []);
+
+  const formatDate = useCallback((dateString: string): string => {
+    try {
+      return new Date(dateString).toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return '-';
+    }
+  }, []);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const headers = getAuthHeaders();
+
+      const handleApiResponse = async (response: Response, endpointName: string) => {
+        console.log(`[DASHBOARD] ${endpointName} - Status: ${response.status}`);
+        
+        if (!response.ok) {
+          if (response.status === 401) {
+            throw new Error(`Authentification requise pour ${endpointName}.`);
+          } else if (response.status === 404) {
+            console.warn(`[DASHBOARD] Endpoint ${endpointName} non trouvé (404)`);
+            return [];
+          } else if (response.status === 403) {
+            throw new Error(`Accès refusé à ${endpointName}.`);
+          } else {
+            throw new Error(`Erreur ${response.status} sur ${endpointName}`);
+          }
+        }
+        
+        const data = await response.json();
+        return data;
+      };
+
+      const [incidentsResponse, equipmentResponse, usersResponse] = await Promise.allSettled([
+        fetch(`${API_BASE_URL}/api/incidents`, { method: 'GET', headers }),
+        fetch(`${API_BASE_URL}/api/equipements`, { method: 'GET', headers }),
+        fetch(`${API_BASE_URL}/api/utilisateur`, { method: 'GET', headers })
+      ]);
+
+      let incidents: Incident[] = [];
+      let equipment: Equipment[] = [];
+      let users: User[] = [];
+
+      if (incidentsResponse.status === 'fulfilled') {
+        try {
+          const incidentsData = await handleApiResponse(incidentsResponse.value, 'incidents');
+          incidents = normalizeToArray(incidentsData);
+          console.log(`[DASHBOARD] ✓ ${incidents.length} incidents chargés`);
+        } catch (error) {
+          console.error('[DASHBOARD] Erreur incidents:', error);
+        }
+      }
+
+      if (equipmentResponse.status === 'fulfilled') {
+        try {
+          const equipmentData = await handleApiResponse(equipmentResponse.value, 'equipements');
+          equipment = normalizeToArray(equipmentData);
+          console.log(`[DASHBOARD] ✓ ${equipment.length} équipements chargés`);
+        } catch (error) {
+          console.error('[DASHBOARD] Erreur équipements:', error);
+        }
+      }
+
+      if (usersResponse.status === 'fulfilled') {
+        try {
+          const usersData = await handleApiResponse(usersResponse.value, 'utilisateurs');
+          users = normalizeToArray(usersData);
+          console.log(`[DASHBOARD] ✓ ${users.length} utilisateurs chargés`);
+        } catch (error) {
+          console.error('[DASHBOARD] Erreur utilisateurs:', error);
+        }
+      }
+
+      // ✅ CALCUL DES STATS AVEC FILTRAGE
+      const incidentStats = calculateIncidentStats(incidents, currentUser?._id);
+      const userStats = calculateUserStats(users);
+      const equipmentStats = calculateEquipmentStats(equipment, currentUser?._id);
+      const equipmentStatusData = calculateEquipmentStatsData(equipment);
+
+      setStats({
+        ...incidentStats,
+        ...userStats,
+        ...equipmentStats,
+      });
+
+      setEquipmentStatus(equipmentStatusData);
+
+      // ✅ FILTRAGE DES INCIDENTS RÉCENTS PAR RÔLE
+      const filteredIncidents = filterIncidentsByRole(incidents, currentUser?._id);
+      
+      const sortedIncidents = filteredIncidents
+        .sort((a, b) => {
+          const dateA = new Date(a.createdAt || a.date || 0).getTime();
+          const dateB = new Date(b.createdAt || b.date || 0).getTime();
+          return dateB - dateA;
+        })
+        .slice(0, 5)
+        .map(incident => ({
+          ...incident,
+          id: incident._id || incident.id || `incident-${Math.random()}`,
+          date: incident.createdAt ? formatDate(incident.createdAt) : incident.date
+        }));
+
+      setRecentIncidents(sortedIncidents);
+
+      // Préparer les utilisateurs récents (admin seulement)
+      if (isAdmin) {
+        const sortedUsers = users
+          .sort((a, b) => {
+            const dateA = new Date(a.createdAt || a.lastLogin || 0).getTime();
+            const dateB = new Date(b.createdAt || b.lastLogin || 0).getTime();
+            return dateB - dateA;
+          })
+          .slice(0, 5)
+          .map(user => ({
+            ...user,
+            id: user._id || user.id || `user-${Math.random()}`,
+            lastLogin: user.lastLogin || (user.createdAt ? formatDate(user.createdAt) : 'N/A')
+          }));
+
+        setRecentUsers(sortedUsers);
+      }
+
+    } catch (error) {
+      console.error('[DASHBOARD] Erreur fatale:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      setError(`${errorMessage}. Vérifiez que le serveur backend est en cours d'exécution.`);
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    getAuthHeaders, 
+    currentUser?._id, 
+    isAdmin, 
+    calculateIncidentStats, 
+    calculateUserStats, 
+    calculateEquipmentStats, 
+    calculateEquipmentStatsData, 
+    formatDate,
+    normalizeToArray,
+    filterIncidentsByRole
+  ]);
+
+  useEffect(() => {
+    console.log('[DASHBOARD] 🚀 Démarrage avec:', {
+      hasToken: !!authToken,
+      userRole,
+      userId: currentUser?._id,
+      userName: currentUser?.name
+    });
+    fetchData();
+  }, [authToken, userRole, currentUser?._id, fetchData]);
+
+  const refreshData = () => {
+    console.log('[DASHBOARD] 🔄 Rafraîchissement manuel');
+    fetchData();
+  };
+
+  const renderAdminStats = () => (
+    <>
+      <StatCard 
+        icon={<Users className="h-6 w-6" />} 
+        title="Total Utilisateurs" 
+        value={stats.totalUsers} 
+        color="bg-blue-100" 
+        gradient="from-blue-500 to-cyan-400"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<Wrench className="h-6 w-6" />} 
+        title="Techniciens" 
+        value={stats.technicienCount} 
+        color="bg-yellow-100" 
+        gradient="from-yellow-500 to-orange-400"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<Users className="h-6 w-6" />} 
+        title="Employés" 
+        value={stats.employeCount} 
+        color="bg-gray-100" 
+        gradient="from-gray-500 to-gray-600"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<Package className="h-6 w-6" />} 
+        title="Total Équipements" 
+        value={stats.totalEquipment} 
+        color="bg-green-100" 
+        gradient="from-green-500 to-emerald-400"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<Package className="h-6 w-6" />} 
+        title="Équipements Assignés" 
+        value={stats.assignedEquipment} 
+        color="bg-blue-100" 
+        gradient="from-blue-500 to-cyan-400"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<Package className="h-6 w-6" />} 
+        title="Équipements Disponibles" 
+        value={stats.availableEquipment} 
+        color="bg-green-100" 
+        gradient="from-green-500 to-emerald-400"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<AlertCircle className="h-6 w-6" />} 
+        title="Total Incidents" 
+        value={stats.totalIncidents} 
+        color="bg-orange-100" 
+        gradient="from-orange-500 to-amber-400"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<Activity className="h-6 w-6" />} 
+        title="Incidents Actifs" 
+        value={stats.activeIncidents} 
+        color="bg-red-100" 
+        gradient="from-red-500 to-pink-400"
+        loading={loading}
+      />
+    </>
+  );
+
+  const renderTechnicienStats = () => (
+    <>
+      <StatCard 
+        icon={<Package className="h-6 w-6" />} 
+        title="Total Équipements" 
+        value={stats.totalEquipment} 
+        color="bg-blue-100" 
+        gradient="from-blue-500 to-cyan-400"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<Package className="h-6 w-6" />} 
+        title="Équipements Assignés" 
+        value={stats.assignedEquipment} 
+        color="bg-purple-100" 
+        gradient="from-purple-500 to-pink-400"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<Package className="h-6 w-6" />} 
+        title="Équipements Disponibles" 
+        value={stats.availableEquipment} 
+        color="bg-green-100" 
+        gradient="from-green-500 to-emerald-400"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<AlertCircle className="h-6 w-6" />} 
+        title="Total Incidents" 
+        value={stats.totalIncidents} 
+        color="bg-orange-100" 
+        gradient="from-orange-500 to-amber-400"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<Activity className="h-6 w-6" />} 
+        title="Incidents Actifs" 
+        value={stats.activeIncidents} 
+        color="bg-red-100" 
+        gradient="from-red-500 to-pink-400"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<CheckCircle className="h-6 w-6" />} 
+        title="Incidents Résolus" 
+        value={stats.resolvedIncidents} 
+        color="bg-green-100" 
+        gradient="from-green-500 to-emerald-400"
+        loading={loading}
+      />
+    </>
+  );
+
+  const renderEmployeStats = () => (
+    <>
+      <StatCard 
+        icon={<Package className="h-6 w-6" />} 
+        title="Équipements Totaux" 
+        value={stats.totalEquipment} 
+        color="bg-blue-100" 
+        gradient="from-blue-500 to-cyan-400"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<Package className="h-6 w-6" />} 
+        title="Mes Équipements" 
+        value={stats.assignedEquipment} 
+        color="bg-purple-100" 
+        gradient="from-purple-500 to-pink-400"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<AlertCircle className="h-6 w-6" />} 
+        title="Mes Incidents" 
+        value={stats.reportedIncidents} 
+        color="bg-orange-100" 
+        gradient="from-orange-500 to-amber-400"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<Activity className="h-6 w-6" />} 
+        title="Mes Incidents Actifs" 
+        value={stats.activeReportedIncidents} 
+        color="bg-red-100" 
+        gradient="from-red-500 to-pink-400"
+        loading={loading}
+      />
+      <StatCard 
+        icon={<CheckCircle className="h-6 w-6" />} 
+        title="Mes Incidents Résolus" 
+        value={stats.resolvedReportedIncidents} 
+        color="bg-green-100" 
+        gradient="from-green-500 to-emerald-400"
+        loading={loading}
+      />
+    </>
+  );
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'nouveau':
+        return 'bg-blue-100 text-blue-800';
+      case 'en cours':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'résolu':
+        return 'bg-green-100 text-green-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority.toLowerCase()) {
+      case 'élevée':
+      case 'haute':
+        return 'bg-red-100 text-red-800';
+      case 'moyenne':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'basse':
+        return 'bg-green-100 text-green-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getDashboardTitle = () => {
+    if (isAdmin) return 'Tableau de bord Administrateur';
+    if (isTechnicien) return 'Tableau de bord Technicien';
+    return 'Tableau de bord Employé';
+  };
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-gradient-to-br from-gray-900/90 to-gray-800/80 backdrop-blur-xl rounded-3xl p-8 border border-gray-700/30 text-center">
+          <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold mb-4 text-white">Erreur de chargement</h2>
+          <p className="text-gray-300 mb-6">{error}</p>
+          <button 
+            onClick={refreshData}
+            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold rounded-full hover:from-blue-500 hover:to-blue-400 transition-all duration-300 transform hover:scale-105"
+          >
+            <RefreshCw className="h-4 w-4 inline mr-2" />
+            Réessayer
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-black text-white overflow-hidden">
+      <div 
+        className="fixed w-6 h-6 rounded-full bg-blue-500/30 pointer-events-none z-50 transition-transform duration-100 ease-out"
+        style={{
+          left: mousePosition.x - 12,
+          top: mousePosition.y - 12,
+          transform: 'scale(1)',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid rgba(59, 130, 246, 0.5)'
+        }}
+      />
+
+      <div className="absolute inset-0">
+        {[...Array(20)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute w-2 h-2 bg-blue-400/20 rounded-full animate-pulse"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 3}s`,
+              animationDuration: `${2 + Math.random() * 2}s`
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="relative z-10 p-6">
+        <div 
+          className="flex justify-between items-center mb-8 opacity-0 transform translate-y-4 transition-all duration-1000 ease-out"
+          style={{ 
+            opacity: visibleSections.has('header') ? 1 : 0,
+            transform: visibleSections.has('header') ? 'translateY(0)' : 'translateY(20px)'
+          }}
+          data-animate
+          id="header"
+        >
+          <div>
+            <h2 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-white to-blue-400 bg-clip-text text-transparent mb-2">
+              {getDashboardTitle()}
+            </h2>
+            <p className="text-gray-400">
+              Rôle: <span className="text-blue-400 font-semibold">{userRole}</span>
+              {currentUser && <span className="ml-2">• {currentUser.name}</span>}
+            </p>
+          </div>
+          <button 
+            onClick={refreshData}
+            className="group px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold rounded-full hover:from-blue-500 hover:to-blue-400 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl hover:shadow-blue-500/25"
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 inline mr-2 ${loading ? 'animate-spin' : 'group-hover:rotate-180'} transition-transform duration-500`} />
+            {loading ? 'Actualisation...' : 'Actualiser'}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+          {isAdmin && renderAdminStats()}
+          {isTechnicien && renderTechnicienStats()}
+          {isEmploye && renderEmployeStats()}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div 
+            className="opacity-0 transform translate-y-4 transition-all duration-1000 ease-out"
+            style={{ 
+              opacity: visibleSections.has('incidents') ? 1 : 0,
+              transform: visibleSections.has('incidents') ? 'translateY(0)' : 'translateY(20px)',
+              transitionDelay: '200ms'
+            }}
+            data-animate
+            id="incidents"
+          >
+            <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-700/30 h-full">
+              <h3 className="text-xl font-bold text-white mb-6 flex items-center">
+                <AlertCircle className="h-5 w-5 text-orange-500 mr-2" />
+                {isEmploye ? 'Mes incidents récents' : 'Incidents récents'}
+              </h3>
+              {recentIncidents.length === 0 ? (
+                <div className="text-center py-12">
+                  <AlertCircle className="h-16 w-16 text-gray-500 mx-auto mb-4" />
+                  <p className="text-gray-400 text-lg">
+                    {isEmploye ? 'Aucun incident déclaré' : 'Aucun incident récent'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {recentIncidents.map((incident, index) => (
+                    <div 
+                      key={incident.id} 
+                      className="bg-gray-800/40 rounded-lg p-4 hover:bg-gray-700/40 transition-colors duration-300 border border-gray-700/20"
+                      style={{ 
+                        opacity: loading ? 0.5 : 1,
+                        transform: `translateY(${loading ? '10px' : '0'})`,
+                        transition: `all 300ms ease-out ${index * 100}ms`
+                      }}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-semibold text-white text-sm">{incident.title}</h4>
+                        <div className="flex gap-2">
+                          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(incident.status)}`}>
+                            {incident.status}
+                          </span>
+                          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getPriorityColor(incident.priority)}`}>
+                            {incident.priority}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-gray-400 text-xs flex items-center">
+                        <Calendar className="h-3 w-3 mr-1" />
+                        {incident.date || '-'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {isAdmin && (
+            <div 
+              className="opacity-0 transform translate-y-4 transition-all duration-1000 ease-out"
+              style={{ 
+                opacity: visibleSections.has('users') ? 1 : 0,
+                transform: visibleSections.has('users') ? 'translateY(0)' : 'translateY(20px)',
+                transitionDelay: '400ms'
+              }}
+              data-animate
+              id="users"
+            >
+              <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/80 backdrop-blur-xl rounded-2xl p-6 border border-gray-700/30 h-full">
+                <h3 className="text-xl font-bold text-white mb-6 flex items-center">
+                  <Users className="h-5 w-5 text-blue-500 mr-2" />
+                  Utilisateurs récents
+                </h3>
+                {recentUsers.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Users className="h-16 w-16 text-gray-500 mx-auto mb-4" />
+                    <p className="text-gray-400 text-lg">Aucun utilisateur récent</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {recentUsers.map((user, index) => (
+                      <div 
+                        key={user.id} 
+                        className="bg-gray-800/40 rounded-lg p-4 hover:bg-gray-700/40 transition-colors duration-300 border border-gray-700/20"
+                        style={{ 
+                          opacity: loading ? 0.5 : 1,
+                          transform: `translateY(${loading ? '10px' : '0'})`,
+                          transition: `all 300ms ease-out ${index * 100}ms`
+                        }}
+                      >
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <h4 className="font-semibold text-white">{user.name}</h4>
+                            <p className="text-blue-400 text-sm">{user.role}</p>
+                          </div>
+                          <span className="text-gray-400 text-xs">{user.lastLogin}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Dashboard;

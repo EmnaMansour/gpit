@@ -1,0 +1,179 @@
+import psutil
+import requests
+import socket
+import time
+from datetime import datetime
+import platform
+import os
+import sys
+
+# === CONFIG ===
+BACKEND = "http://192.168.50.1:8000"  # URL de ton backend
+LOGIN_URL = f"{BACKEND}/api/users/login"
+API_INCIDENT = f"{BACKEND}/api/incidents"
+API_USERS = f"{BACKEND}/api/users"
+
+AUTH = {"email": "admin@gmail.com", "password": "admin"}  # adapter selon ton compte
+EQUIPEMENT_ID = "68e63a82f0087dece309c781"
+
+CPU_THRESHOLD = 40
+RAM_THRESHOLD = 85
+DISK_THRESHOLD = 90
+PERSIST_COUNT = 3
+COOLDOWN = 300
+
+TOKEN = None
+USERS_CACHE = []
+sent_incidents = {}
+recent_incidents = []
+
+# --- UTILITAIRES ---
+def log(msg):
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+def beep():
+    if sys.platform.startswith("win"):
+        import winsound
+        winsound.Beep(1000, 300)
+    else:
+        print("\a", end="")
+
+def headers():
+    return {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"} if TOKEN else {"Content-Type": "application/json"}
+
+def authenticate():
+    global TOKEN
+    try:
+        r = requests.post(LOGIN_URL, json=AUTH, timeout=5)
+        if r.status_code == 200:
+            TOKEN = r.json().get("token") or r.json().get("access_token")
+            log("✅ Authentification OK")
+            return True
+        else:
+            log(f"❌ Login failed {r.status_code}: {r.text}")
+    except Exception as e:
+        log(f"⚠️ Erreur auth: {e}")
+    return False
+
+def fetch_users():
+    global USERS_CACHE
+    try:
+        r = requests.get(API_USERS, headers=headers(), timeout=5)
+        if r.status_code == 401 and authenticate():
+            r = requests.get(API_USERS, headers=headers(), timeout=5)
+        if r.status_code == 200:
+            USERS_CACHE = r.json() if isinstance(r.json(), list) else r.json().get("data", [])
+            log(f"📥 {len(USERS_CACHE)} utilisateurs récupérés")
+        else:
+            log(f"⚠️ Erreur récupération users {r.status_code}: {r.text}")
+    except Exception as e:
+        log(f"⚠️ Exception fetch_users: {e}")
+
+def pick_assignees():
+    assignees = []
+    def is_tech(role_str):
+        return role_str and ("tech" in role_str.lower() or "technicien" in role_str.lower())
+    def is_admin(role_str):
+        return role_str and ("admin" in role_str.lower() or "administrator" in role_str.lower())
+    for user in USERS_CACHE:
+        role = user.get("role") or user.get("roles") or user.get("roleName") or ""
+        if is_tech(role) or is_admin(role):
+            uid = user.get("_id") or user.get("id")
+            if uid:
+                assignees.append(uid)
+    return assignees
+
+def get_machine_info():
+    try:
+        ip = socket.gethostbyname(socket.gethostname())
+    except:
+        ip = "0.0.0.0"
+    hostname = socket.gethostname()
+    os_info = platform.system() + " " + platform.release()
+    return {"hostname": hostname, "ip": ip, "os": os_info}
+
+def send_incident(resource, value):
+    key = f"{EQUIPEMENT_ID}_{resource}"
+    if key in sent_incidents and (time.time() - sent_incidents[key] < COOLDOWN):
+        return
+
+    if not TOKEN and not authenticate():
+        log("🚫 Pas de token, impossible d'envoyer")
+        return
+
+    if not USERS_CACHE:
+        fetch_users()
+
+    assignees = pick_assignees()
+    machine = get_machine_info()
+    now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    incident = {
+        "title": f"{resource} élevé sur {machine['hostname']}",
+        "description": f"{resource} a atteint {value:.1f}% sur {machine['hostname']} ({machine['ip']})\n{machine['os']}\n{now_str}",
+        "priority": "Élevée",
+        "status": "Nouveau",
+        "equipment": EQUIPEMENT_ID,
+        "assignedTo": assignees
+    }
+
+    try:
+        r = requests.post(API_INCIDENT, json=incident, headers=headers(), timeout=5)
+        if r.status_code in (200, 201):
+            sent_incidents[key] = time.time()
+            recent_incidents.append({"resource": resource, "value": value, "time": now_str, "assigned": len(assignees)})
+            if len(recent_incidents) > 10:
+                recent_incidents.pop(0)
+            log(f"[✅] Incident {resource}={value:.1f}% envoyé -> assigné à {len(assignees)} utilisateurs")
+            beep()
+        else:
+            log(f"[❌] Erreur envoi: {r.status_code} {r.text}")
+    except Exception as e:
+        log(f"[❌] Exception send_incident: {e}")
+
+def display_dashboard(cpu, ram, disk):
+    os.system("cls" if os.name=="nt" else "clear")
+    print("🚀 Surveillance intelligente GPIT\n")
+    print(f"💻 CPU : {cpu:.1f}% {'⚠️' if cpu>CPU_THRESHOLD else '✅'}")
+    print(f"🖥 RAM : {ram:.1f}% {'⚠️' if ram>RAM_THRESHOLD else '✅'}")
+    print(f"💾 DISK: {disk:.1f}% {'⚠️' if disk>DISK_THRESHOLD else '✅'}\n")
+    print("📌 Incidents récents :")
+    if not recent_incidents:
+        print("Aucun incident")
+    for inc in recent_incidents:
+        print(f"- {inc['time']} | {inc['resource']}={inc['value']:.1f}% | Assignés={inc['assigned']}")
+    print("\n🔄 Mise à jour toutes les 10 secondes\n")
+
+def monitor():
+    log("🚀 Agent de surveillance intelligent démarré...")
+    if not authenticate():
+        log("🚫 Auth échouée, arrêt.")
+        return
+    fetch_users()
+
+    cpu_count = ram_count = disk_count = 0
+
+    while True:
+        cpu = psutil.cpu_percent(interval=1)
+        ram = psutil.virtual_memory().percent
+        disk = psutil.disk_usage("/").percent
+
+        cpu_count = cpu_count+1 if cpu>CPU_THRESHOLD else 0
+        ram_count = ram_count+1 if ram>RAM_THRESHOLD else 0
+        disk_count = disk_count+1 if disk>DISK_THRESHOLD else 0
+
+        if cpu_count >= PERSIST_COUNT:
+            send_incident("CPU", cpu)
+            cpu_count = 0
+        if ram_count >= PERSIST_COUNT:
+            send_incident("RAM", ram)
+            ram_count = 0
+        if disk_count >= PERSIST_COUNT:
+            send_incident("DISK", disk)
+            disk_count = 0
+
+        display_dashboard(cpu, ram, disk)
+        time.sleep(10)
+
+if __name__ == "__main__":
+    monitor()

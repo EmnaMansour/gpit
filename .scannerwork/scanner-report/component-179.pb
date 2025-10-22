@@ -1,0 +1,1 @@
+³ (2jsX%hr$backend/__tests__/equipement.test.js

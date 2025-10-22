@@ -1,0 +1,36 @@
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: frontend
+#   namespace: gpit
+# spec:
+#   replicas: 1
+#   selector:
+#     matchLabels:
+#       app: frontend
+#   template:
+#     metadata:
+#       labels:
+#         app: frontend
+#     spec:
+#       containers:
+#       - name: frontend
+#         image: <ACCOUNT_ID>.dkr.ecr.eu-west-3.amazonaws.com/gpit-frontend:latest
+#         ports:
+#         - containerPort: 80
+#         env:
+#         - name: VITE_API_URL
+#           value: http://backend-service.gpit.svc.cluster.local:8000
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: frontend-service
+#   namespace: gpit
+# spec:
+#   selector:
+#     app: frontend
+#   ports:
+#   - port: 80
+#     targetPort: 80
+#   type: LoadBalancer

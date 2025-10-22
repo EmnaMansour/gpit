@@ -1,0 +1,1 @@
+© 2tsXáhrfrontend/src/pages/Register.tsx
