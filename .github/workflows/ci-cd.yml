@@ -1,4 +1,4 @@
-name: CI/CD GPIT
+name: CI/CD GPIT Docker + Cypress + SonarQube
 
 on:
   push:
@@ -11,55 +11,83 @@ on:
 jobs:
   build-test-deploy:
     runs-on: ubuntu-latest
-
     env:
       NODE_ENV: production
 
+    services:
+      mongo:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      sonarqube:
+        image: sonarqube:community
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -f http://localhost:9000 || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
-      # 1️⃣ Cloner le dépôt
-      - name: 📦 Checkout repository
+      # 1️⃣ Checkout repository
+      - name: 📦 Checkout
         uses: actions/checkout@v3
 
-      # 2️⃣ Installer Node.js
+      # 2️⃣ Setup Node.js
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20'
 
-      # 3️⃣ Installer sshpass pour le déploiement
-      - name: 🔑 Installer sshpass
-        run: sudo apt-get update && sudo apt-get install -y sshpass
+      # 3️⃣ Installer sshpass pour déploiement
+      - name: 🔑 Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass curl
 
-      # 4️⃣ Installer backend
-      - name: ⚙️ Install backend
-        working-directory: ./backend
-        run: npm ci
+      # 4️⃣ Build backend Docker
+      - name: 🐳 Build Docker backend
+        run: docker build -t gpit-backend ./backend
 
-      # 5️⃣ Lancer tests backend
-      - name: 🧪 Test backend
-        working-directory: ./backend
-        run: npm test || echo "⚠️ Aucun test défini, on continue"
+      # 5️⃣ Build frontend Docker
+      - name: 🐳 Build Docker frontend
+        run: docker build -t gpit-frontend ./frontend
 
-      # 6️⃣ Installer frontend
-      - name: ⚙️ Install frontend
-        working-directory: ./frontend
-        run: npm ci
+      # 6️⃣ Lancer backend pour tests
+      - name: ▶️ Run backend container
+        run: |
+          docker run -d --name gpit-backend-test -p 8000:8000 --env-file ./backend/.env gpit-backend
+          sleep 10
 
-      # 7️⃣ Build frontend
-      - name: 🧱 Build frontend
-        working-directory: ./frontend
-        run: npm run build
-
-      # 8️⃣ Analyse SonarCloud
-      - name: 🔍 SonarCloud Analysis
-        uses: sonarsource/sonarcloud-github-action@v2
+      # 7️⃣ Cypress E2E tests
+      - name: 🧪 Cypress tests
+        uses: cypress-io/github-action@v5
         with:
-          projectKey: gpit
-          organization: EmnaMansour
-          token: ${{ secrets.SONAR_TOKEN }}
+          start: docker run -d -p 5173:5173 gpit-frontend
+          wait-on: http://localhost:5173
+          wait-on-timeout: 60
+          browser: chrome
 
-      # 9️⃣ Déploiement SSH
-      - name: 🚀 Déploiement sur serveur
+      # 8️⃣ Analyse SonarQube local
+      - name: 🔍 Analyse SonarQube
+        env:
+          SONAR_HOST_URL: http://localhost:9000
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          cd backend
+          sonar-scanner \
+            -Dsonar.projectKey=gpit \
+            -Dsonar.sources=. \
+            -Dsonar.host.url=$SONAR_HOST_URL \
+            -Dsonar.login=$SONAR_TOKEN
+
+      # 9️⃣ Déploiement sur serveur via SSH + Docker
+      - name: 🚀 Deploy to server
         if: success()
         env:
           SERVER_USER: ${{ secrets.SERVER_USER }}
@@ -68,21 +96,18 @@ jobs:
         run: |
           sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "
             cd /var/www/gpit &&
-            git reset --hard &&
-            git pull origin main &&
-            npm ci --prefix backend &&
-            npm run build --prefix frontend &&
-            pm2 restart all
+            docker-compose down &&
+            docker-compose pull &&
+            docker-compose up -d
           "
 
-      # 🔟 Test post-déploiement backend
-      - name: 🔍 Test post-déploiement backend
+      # 🔟 Test backend post-déploiement
+      - name: 🔍 Test backend post-deploy
         if: success()
         env:
           SERVER_IP: ${{ secrets.SERVER_IP }}
           SERVER_PORT: ${{ secrets.SERVER_PORT }}
         run: |
-          echo "Test du backend..."
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVER_IP:$SERVER_PORT/api/health)
           if [ "$RESPONSE" -ne 200 ]; then
             echo "❌ Backend non opérationnel !"
@@ -90,13 +115,12 @@ jobs:
           else
             echo "✅ Backend OK"
 
-      # 1️⃣1️⃣ Test post-déploiement frontend
-      - name: 🔍 Test post-déploiement frontend
+      # 1️⃣1️⃣ Test frontend post-déploiement
+      - name: 🔍 Test frontend post-deploy
         if: success()
         env:
           SERVER_IP: ${{ secrets.SERVER_IP }}
         run: |
-          echo "Test du frontend..."
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVER_IP)
           if [ "$RESPONSE" -ne 200 ]; then
             echo "❌ Frontend non opérationnel !"
