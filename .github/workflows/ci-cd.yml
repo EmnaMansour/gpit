@@ -4,61 +4,100 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  build-test-analyze-deploy:
+  build-test-deploy:
     runs-on: ubuntu-latest
 
+    env:
+      NODE_ENV: production
+
     steps:
-      # 1️⃣ Cloner ton dépôt
-      - name: 📦 Cloner le code
+      # 1️⃣ Cloner le dépôt
+      - name: 📦 Checkout repository
         uses: actions/checkout@v3
 
-      # 2️⃣ Installer le backend
-      - name: ⚙️ Installer le backend
-        working-directory: ./backend
-        run: |
-          npm install
+      # 2️⃣ Installer Node.js
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
 
-      # 3️⃣ Lancer les tests du backend
-      - name: 🧪 Tests backend
-        working-directory: ./backend
-        run: |
-          npm test || echo "⚠️ Aucun test défini, on continue"
+      # 3️⃣ Installer sshpass pour le déploiement
+      - name: 🔑 Installer sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
 
-      # 4️⃣ Installer le frontend
-      - name: ⚙️ Installer le frontend
+      # 4️⃣ Installer backend
+      - name: ⚙️ Install backend
+        working-directory: ./backend
+        run: npm ci
+
+      # 5️⃣ Lancer tests backend
+      - name: 🧪 Test backend
+        working-directory: ./backend
+        run: npm test || echo "⚠️ Aucun test défini, on continue"
+
+      # 6️⃣ Installer frontend
+      - name: ⚙️ Install frontend
         working-directory: ./frontend
-        run: |
-          npm install
+        run: npm ci
 
-      # 5️⃣ Lancer le build du frontend
+      # 7️⃣ Build frontend
       - name: 🧱 Build frontend
         working-directory: ./frontend
-        run: |
-          npm run build
+        run: npm run build
 
-      # 6️⃣ Analyse du code avec SonarQube
-      - name: 🔍 Analyse SonarQube
-        uses: sonarsource/sonarqube-scan-action@v2
+      # 8️⃣ Analyse SonarCloud
+      - name: 🔍 SonarCloud Analysis
+        uses: sonarsource/sonarcloud-github-action@v2
         with:
-          projectBaseDir: .
-          args: >
-            -Dsonar.projectKey=gpit
-            -Dsonar.host.url=http://localhost:9000
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+          projectKey: gpit
+          organization: EmnaMansour
+          token: ${{ secrets.SONAR_TOKEN }}
 
-      # 7️⃣ Déploiement automatique si tout est OK
-      - name: 🚀 Déploiement
+      # 9️⃣ Déploiement SSH
+      - name: 🚀 Déploiement sur serveur
         if: success()
+        env:
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_PASS: ${{ secrets.SERVER_PASS }}
         run: |
-          echo "Déploiement automatique en cours..."
-          # Exemple de déploiement SSH vers ton serveur
-          # (tu peux l’adapter à ton cas)
-          sshpass -p "${{ secrets.SERVER_PASS }}" ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "
+          sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "
             cd /var/www/gpit &&
+            git reset --hard &&
             git pull origin main &&
-            npm install --prefix backend &&
+            npm ci --prefix backend &&
             npm run build --prefix frontend &&
             pm2 restart all
           "
+
+      # 🔟 Test post-déploiement backend
+      - name: 🔍 Test post-déploiement backend
+        if: success()
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVER_IP:$SERVER_PORT/api/health)
+          if [ "$RESPONSE" -ne 200 ]; then
+            echo "❌ Backend non opérationnel !"
+            exit 1
+          else
+            echo "✅ Backend OK"
+
+      # 1️⃣1️⃣ Test post-déploiement frontend
+      - name: 🔍 Test post-déploiement frontend
+        if: success()
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVER_IP)
+          if [ "$RESPONSE" -ne 200 ]; then
+            echo "❌ Frontend non opérationnel !"
+            exit 1
+          else
+            echo "✅ Frontend OK"
