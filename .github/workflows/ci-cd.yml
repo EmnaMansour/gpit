@@ -82,6 +82,7 @@ jobs:
           SERVER_IP: ${{ secrets.SERVER_IP }}
           SERVER_PORT: ${{ secrets.SERVER_PORT }}
         run: |
+          echo "Test du backend..."
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVER_IP:$SERVER_PORT/api/health)
           if [ "$RESPONSE" -ne 200 ]; then
             echo "❌ Backend non opérationnel !"
@@ -95,6 +96,7 @@ jobs:
         env:
           SERVER_IP: ${{ secrets.SERVER_IP }}
         run: |
+          echo "Test du frontend..."
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVER_IP)
           if [ "$RESPONSE" -ne 200 ]; then
             echo "❌ Frontend non opérationnel !"
