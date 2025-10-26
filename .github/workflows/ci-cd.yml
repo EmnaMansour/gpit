@@ -1,12 +1,10 @@
-name: CI/CD GPIT Docker + Cypress + SonarQube
+name: CI/CD GPIT Docker + Cypress + SonarCloud
 
 on:
   push:
     branches:
       - main
   pull_request:
-    branches:
-      - main
 
 jobs:
   build-test-deploy:
@@ -26,29 +24,41 @@ jobs:
           --health-retries 5
 
     steps:
+      # 1️⃣ Checkout repository
       - name: 📦 Checkout repository
         uses: actions/checkout@v3
 
+      # 2️⃣ Setup Node.js
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20'
 
-      - name: 🔑 Install sshpass
-        run: sudo apt-get update && sudo apt-get install -y sshpass curl
+      # 3️⃣ Install dependencies backend
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm install
 
-      - name: 🐳 Build Docker backend
+      # 4️⃣ Install dependencies frontend
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      # 5️⃣ Build Docker images
+      - name: Build Docker backend
         run: docker build -t gpit-backend ./backend
 
-      - name: 🐳 Build Docker frontend
+      - name: Build Docker frontend
         run: docker build -t gpit-frontend ./frontend
 
-      - name: ▶️ Run backend container
+      # 6️⃣ Run backend container for tests
+      - name: Run backend container
         run: |
           docker run -d --name gpit-backend-test -p 8000:8000 --env-file ./backend/.env gpit-backend
-          sleep 10
+          sleep 15
 
-      - name: 🧪 Cypress tests
+      # 7️⃣ Run Cypress E2E tests
+      - name: Cypress E2E tests
         uses: cypress-io/github-action@v5
         with:
           start: docker run -d -p 5173:5173 gpit-frontend
@@ -56,51 +66,46 @@ jobs:
           wait-on-timeout: 60
           browser: chrome
 
-      - name: 🔍 SonarQube Analysis
-        env:
-          SONAR_HOST_URL: http://localhost:9000
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          cd backend
-          sonar-scanner \
-            -Dsonar.projectKey=gpit \
-            -Dsonar.sources=. \
-            -Dsonar.host.url=$SONAR_HOST_URL \
-            -Dsonar.login=$SONAR_TOKEN
+      # 8️⃣ SonarCloud analysis
+      - name: SonarCloud Scan
+        uses: sonarsource/sonarcloud-github-action@v2
+        with:
+          organization: ${{ secrets.SONAR_ORG }}
+          token: ${{ secrets.SONAR_TOKEN }}
+          projectKey: gestion_parc_info
+          projectName: Gestion Parc Info
+          extraProperties: |
+            sonar.sources=backend,frontend/src
+            sonar.tests=backend/__tests__,cypress/e2e
+            sonar.javascript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info
 
-      - name: 🚀 Deploy to server
-        if: success()
-        env:
-          SERVER_USER: ${{ secrets.SERVER_USER }}
-          SERVER_IP: ${{ secrets.SERVER_IP }}
-          SERVER_PASS: ${{ secrets.SERVER_PASS }}
-        run: |
-          sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "
-            cd /var/www/gpit &&
-            docker-compose down &&
-            docker-compose pull &&
-            docker-compose up -d
-          "
+      # 9️⃣ Deploy to server via SSH
+      - name: SSH Deploy to Server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /var/www/gpit
+            docker-compose down
+            docker-compose pull
+            docker-compose up -d --remove-orphans
 
-      - name: 🔍 Test backend post-deploy
-        if: success()
-        env:
-          SERVER_IP: ${{ secrets.SERVER_IP }}
-          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+      # 🔟 Test backend post-deploy
+      - name: Test backend post-deploy
         run: |
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVER_IP:$SERVER_PORT/api/health)
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.SERVER_IP }}:8000/api/health)
           if [ "$RESPONSE" -ne 200 ]; then
             echo "❌ Backend non opérationnel !"
             exit 1
           else
             echo "✅ Backend OK"
 
-      - name: 🔍 Test frontend post-deploy
-        if: success()
-        env:
-          SERVER_IP: ${{ secrets.SERVER_IP }}
+      # 1️⃣1️⃣ Test frontend post-deploy
+      - name: Test frontend post-deploy
         run: |
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVER_IP)
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.SERVER_IP }})
           if [ "$RESPONSE" -ne 200 ]; then
             echo "❌ Frontend non opérationnel !"
             exit 1
