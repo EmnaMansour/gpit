@@ -59,7 +59,7 @@ jobs:
       - name: 🔍 SonarQube Analysis
         env:
           SONAR_HOST_URL: http://localhost:9000
-          SONAR_TOKEN: sqa_6d6c55267ce6aeea658844753064c565e10d5954
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           cd backend
           sonar-scanner \
