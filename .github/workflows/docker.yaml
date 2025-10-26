@@ -1,14 +1,16 @@
-name:  GPIT CI/CD Pipeline
+name: GPIT CI/CD Pipeline
 
 on:
   push:
     branches:
       - main
   pull_request:
+    branches:
+      - main
 
 jobs:
   build-test:
-    name:  Build & Test Application
+    name: Build & Test Application
     runs-on: ubuntu-latest
 
     services:
@@ -26,27 +28,29 @@ jobs:
           --health-retries 5
 
     steps:
-      - name:  Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name:  Setup Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name:  Install backend dependencies
+      # Backend
+      - name: Install backend dependencies
         working-directory: backend
         run: npm install
 
-      - name:  Run backend tests
+      - name: Run backend tests
         working-directory: backend
         run: npm test || echo "No backend tests found"
 
-      - name:  Install frontend dependencies
+      # Frontend
+      - name: Install frontend dependencies
         working-directory: frontend
         run: npm install
 
-      - name:  Run Cypress E2E tests
+      - name: Run Cypress E2E tests
         working-directory: frontend
         run: npx cypress run || echo "Cypress tests skipped"
 
@@ -55,39 +59,42 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-test
     steps:
-      - uses: actions/checkout@v4
-      - name: SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@v2
-        with:
-          args: >
-            -Dsonar.projectKey=gpit
-            -Dsonar.sources=.
-            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
-            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
-
-  docker:
-    name:  Build & Push Docker Images
-    runs-on: ubuntu-latest
-    needs: sonar
-
-    steps:
-      - name:  Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name:  Login to Docker Hub
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@v2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=gestion_parc_info
+            -Dsonar.sources=backend,frontend/src
+            -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.login=$SONAR_TOKEN
+
+  docker:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: sonar
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name:  Build and push Backend image
+      - name: Build and push Backend image
         uses: docker/build-push-action@v5
         with:
           context: ./backend
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/gpit-backend:latest
 
-      - name:  Build and push Frontend image
+      - name: Build and push Frontend image
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
@@ -95,13 +102,12 @@ jobs:
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/gpit-frontend:latest
 
   deploy:
-    name:  Deploy (optionnel)
+    name: Deploy to AWS
     runs-on: ubuntu-latest
     needs: docker
     if: github.ref == 'refs/heads/main'
-
     steps:
-      - name:  SSH Deploy to Server
+      - name: SSH Deploy to Server
         uses: appleboy/ssh-action@v1.1.0
         with:
           host: ${{ secrets.SERVER_HOST }}
