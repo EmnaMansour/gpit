@@ -25,46 +25,29 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-      sonarqube:
-        image: sonarqube:community
-        ports:
-          - 9000:9000
-        options: >-
-          --health-cmd "curl -f http://localhost:9000 || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-
     steps:
-      # 1️⃣ Checkout repository
-      - name: 📦 Checkout
+      - name: 📦 Checkout repository
         uses: actions/checkout@v3
 
-      # 2️⃣ Setup Node.js
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20'
 
-      # 3️⃣ Installer sshpass pour déploiement
       - name: 🔑 Install sshpass
         run: sudo apt-get update && sudo apt-get install -y sshpass curl
 
-      # 4️⃣ Build backend Docker
       - name: 🐳 Build Docker backend
         run: docker build -t gpit-backend ./backend
 
-      # 5️⃣ Build frontend Docker
       - name: 🐳 Build Docker frontend
         run: docker build -t gpit-frontend ./frontend
 
-      # 6️⃣ Lancer backend pour tests
       - name: ▶️ Run backend container
         run: |
           docker run -d --name gpit-backend-test -p 8000:8000 --env-file ./backend/.env gpit-backend
           sleep 10
 
-      # 7️⃣ Cypress E2E tests
       - name: 🧪 Cypress tests
         uses: cypress-io/github-action@v5
         with:
@@ -73,11 +56,10 @@ jobs:
           wait-on-timeout: 60
           browser: chrome
 
-      # 8️⃣ Analyse SonarQube local
-      - name: 🔍 Analyse SonarQube
+      - name: 🔍 SonarQube Analysis
         env:
           SONAR_HOST_URL: http://localhost:9000
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: sqa_6d6c55267ce6aeea658844753064c565e10d5954
         run: |
           cd backend
           sonar-scanner \
@@ -86,7 +68,6 @@ jobs:
             -Dsonar.host.url=$SONAR_HOST_URL \
             -Dsonar.login=$SONAR_TOKEN
 
-      # 9️⃣ Déploiement sur serveur via SSH + Docker
       - name: 🚀 Deploy to server
         if: success()
         env:
@@ -101,7 +82,6 @@ jobs:
             docker-compose up -d
           "
 
-      # 🔟 Test backend post-déploiement
       - name: 🔍 Test backend post-deploy
         if: success()
         env:
@@ -115,7 +95,6 @@ jobs:
           else
             echo "✅ Backend OK"
 
-      # 1️⃣1️⃣ Test frontend post-déploiement
       - name: 🔍 Test frontend post-deploy
         if: success()
         env:
