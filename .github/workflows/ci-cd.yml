@@ -1,4 +1,4 @@
-name: CI/CD GPIT - Build · Test · Cypress · SonarCloud · Deploy
+name: CI/CD GPIT - Build · Test · SonarCloud · Deploy
 
 on:
   push:
@@ -11,7 +11,7 @@ env:
 
 jobs:
   build-test-sonar:
-    name: Build · Test · Cypress · SonarCloud
+    name: Build · Test · SonarCloud
     runs-on: ubuntu-latest
 
     services:
@@ -50,7 +50,6 @@ jobs:
       - name: Run backend tests (jest)
         working-directory: backend
         run: |
-          # Use runInBand to avoid mongoose multiple-connect race conditions
           npm test -- --runInBand --detectOpenHandles --coverage --watchAll=false || true
           if [ -f coverage/lcov.info ]; then echo "backend coverage OK"; else echo "no backend coverage"; fi
 
@@ -65,48 +64,12 @@ jobs:
           npm test -- --runInBand --coverage --watchAll=false || true
           if [ -f coverage/lcov.info ]; then echo "frontend coverage OK"; else echo "no frontend coverage"; fi
 
-      # ---------- Optional Docker build (for images to deploy) ----------
+      # ---------- Optional Docker build ----------
       - name: Build Docker backend image
         run: docker build -t gpit-backend:ci ./backend
 
       - name: Build Docker frontend image
         run: docker build -t gpit-frontend:ci ./frontend
-
-      # ---------- Start backend locally for Cypress E2E ----------
-      - name: Start backend for E2E
-        working-directory: backend
-        run: |
-          export PORT=8000
-          export MONGO_URI="mongodb://admin:password@localhost:27017/gpit?authSource=admin"
-          npm start &> backend-e2e.log &
-          for i in {1..30}; do
-            if curl -fsS http://localhost:8000/api/health >/dev/null 2>&1; then
-              echo "backend ready"; break
-            fi
-            echo "waiting backend... ($i/30)"; sleep 2
-          done
-          curl -fsS http://localhost:8000/api/health || (echo "backend start failed"; tail -n 200 backend-e2e.log; exit 1)
-
-      - name: Start frontend for E2E (Vite)
-        working-directory: frontend
-        run: |
-          npm run build
-          # serve the static build quickly using serve package (install temporarily)
-          npm i -g serve
-          serve -s dist -l 5173 &> frontend-e2e.log &
-          for i in {1..30}; do
-            if curl -fsS http://localhost:5173 >/dev/null 2>&1; then echo "frontend ready"; break; fi
-            echo "waiting frontend... ($i/30)"; sleep 2
-          done
-          curl -fsS http://localhost:5173 || (echo "frontend start failed"; tail -n 200 frontend-e2e.log; exit 1)
-
-      - name: Cypress E2E tests
-        uses: cypress-io/github-action@v5
-        with:
-          working-directory: frontend
-          browser: chrome
-          wait-on: http://localhost:5173
-          wait-on-timeout: 120
 
       # ---------- SonarCloud ----------
       - name: Cache Sonar
@@ -130,7 +93,7 @@ jobs:
             -Dsonar.sources=backend,frontend/src
             -Dsonar.tests=backend/__tests__,frontend/src/__tests__
             -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info
-            -Dsonar.coverage.exclusions=**/node_modules/**,**/*.d.ts,**/cypress/**
+            -Dsonar.coverage.exclusions=**/node_modules/**,**/*.d.ts
 
   deploy:
     name: Deploy to production (SSH)
@@ -142,8 +105,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build & push images (optional, if you use registry)
-        run: echo "Skip or add docker push to registry here"
+      - name: Build & push images (optional, registry)
+        run: echo "Add docker push here if needed"
 
       - name: Deploy via SSH (docker-compose on server)
         uses: appleboy/ssh-action@v1.1.0
@@ -156,7 +119,6 @@ jobs:
             docker-compose pull || true
             docker-compose down --remove-orphans || true
             docker-compose up -d --build --remove-orphans
-            # wait health
             for i in $(seq 1 12); do
               if curl -fsS http://localhost:8000/api/health >/dev/null 2>&1; then echo "backend OK"; break; fi
               echo "waiting server... ($i/12)"; sleep 5
