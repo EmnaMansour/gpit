@@ -12,26 +12,22 @@ env:
 jobs:
   build-test-sonar:
     runs-on: ubuntu-latest
-    
+
     services:
+      # MongoDB service
       mongo:
         image: mongo:6.0
-        ports: [27017:27017]
         env:
           MONGO_INITDB_ROOT_USERNAME: admin
           MONGO_INITDB_ROOT_PASSWORD: password
-        options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+        command: ["--bind_ip_all"]
 
     steps:
       # 1️⃣ Checkout repository
       - name: 📦 Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 🔑 Essentiel pour SonarCloud
+          fetch-depth: 0
 
       # 2️⃣ Setup Node.js
       - name: ⚙️ Setup Node.js
@@ -52,33 +48,50 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      # 4️⃣ Build Docker images
+      # 4️⃣ Build Docker images (optionnel si tu veux CI Docker)
       - name: 🐳 Build Docker backend
         run: docker build -t gpit-backend ./backend
 
       - name: 🐳 Build Docker frontend
         run: docker build -t gpit-frontend ./frontend
 
-      # 5️⃣ Run backend container for Cypress
+      # 5️⃣ Run backend container with Mongo service
       - name: ▶️ Run backend container
         run: |
-          docker run -d --name gpit-backend-test -p 8000:8000 \
-            -e MONGO_URI=mongodb://admin:password@localhost:27017/gpit \
+          docker run -d --name gpit-backend-test \
+            -e MONGO_URI=mongodb://admin:password@mongo:27017/gpit \
+            -e NODE_ENV=test \
+            -p 8000:8000 \
             gpit-backend
+          echo "⏳ Waiting for backend to be ready..."
           sleep 15
           curl -f http://localhost:8000/api/health || echo "Backend starting..."
 
-      # 6️⃣ Cypress E2E tests
+      # 6️⃣ Start frontend for Cypress
+      - name: ▶️ Start frontend server
+        working-directory: frontend
+        run: npm run dev &
+
+      # 7️⃣ Wait for frontend
+      - name: ⏳ Wait for frontend
+        run: |
+          for i in {1..20}; do
+            curl -s http://localhost:5173 && break
+            echo "Waiting for frontend..."
+            sleep 3
+          done
+
+      # 8️⃣ Cypress E2E tests
       - name: 🧪 Cypress E2E tests
         uses: cypress-io/github-action@v5
         with:
-          start: docker run -d -p 5173:5173 gpit-frontend
+          working-directory: frontend
+          browser: chrome
+          start: npm run dev
           wait-on: http://localhost:5173
           wait-on-timeout: 120
-          browser: chrome
-          working-directory: frontend
 
-      # 7️⃣ Cache SonarCloud
+      # 9️⃣ Cache SonarCloud
       - name: 🗂️ Cache SonarCloud
         uses: actions/cache@v3
         with:
@@ -86,7 +99,7 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
-      # 8️⃣ SonarCloud analysis
+      # 🔟 SonarCloud analysis
       - name: 🔍 SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         env:
@@ -104,18 +117,19 @@ jobs:
             -Dsonar.coverage.exclusions=**/node_modules/**,**/*.d.ts,**/cypress/**,**/dist/**
             -Dsonar.qualitygate.wait=true
 
-# Le job deploy reste identique
+# -----------------------------
+# Déploiement sur production
+# -----------------------------
 deploy:
   name: 🚀 Deploy to Production
   runs-on: ubuntu-latest
   needs: build-test-sonar
   if: github.ref == 'refs/heads/main' && success()
-  
+
   steps:
     - name: 📦 Checkout repository
       uses: actions/checkout@v4
 
-    # Deploy via SSH
     - name: 🔑 SSH Deploy to Server
       uses: appleboy/ssh-action@v1.1.0
       with:
@@ -136,7 +150,6 @@ deploy:
     # Test backend post-deploy
     - name: 🔍 Test backend post-deploy
       run: |
-        echo "🧪 Test du backend sur ${{ secrets.SERVER_IP }}:8000"
         max_attempts=10
         attempt=1
         until curl -f -s http://${{ secrets.SERVER_IP }}:8000/api/health; do
@@ -153,7 +166,6 @@ deploy:
     # Test frontend post-deploy
     - name: 🔍 Test frontend post-deploy
       run: |
-        echo "🧪 Test du frontend sur ${{ secrets.SERVER_IP }}"
         max_attempts=10
         attempt=1
         until curl -f -s http://${{ secrets.SERVER_IP }}; do
