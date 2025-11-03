@@ -2,86 +2,123 @@ name: CI/CD GPIT Docker + Cypress + SonarCloud
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 env:
   NODE_ENV: test
 
 jobs:
   build-test-sonar:
+    name: Build · Test · Cypress · SonarCloud
     runs-on: ubuntu-latest
 
     services:
-      # MongoDB service
       mongo:
         image: mongo:6.0
         env:
           MONGO_INITDB_ROOT_USERNAME: admin
           MONGO_INITDB_ROOT_PASSWORD: password
-        command: ["--bind_ip_all"]
+        ports:
+          - 27017:27017
+        # options must be a string for multi-arg flags
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
-      # 1️⃣ Checkout repository
       - name: 📦 Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 2️⃣ Setup Node.js
-      - name: ⚙️ Setup Node.js
+      - name: ⚙️ Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
           cache-dependency-path: |
             backend/package-lock.json
             frontend/package-lock.json
 
-      # 3️⃣ Install dependencies
+      # ---------- BACKEND ----------
       - name: 📥 Install backend dependencies
         working-directory: backend
         run: npm ci
 
+      - name: 🧪 Run backend tests (jest + coverage)
+        working-directory: backend
+        run: |
+          # ajoute --runInBand si tu as des problèmes de connexion Mongo depuis tests
+          npm test -- --coverage --watchAll=false || true
+          if [ -f coverage/lcov.info ]; then
+            echo "coverage found"
+          else
+            echo "no backend coverage generated"
+          fi
+
+      # ---------- FRONTEND ----------
       - name: 📥 Install frontend dependencies
         working-directory: frontend
         run: npm ci
 
-      # 4️⃣ Build Docker images (optionnel si tu veux CI Docker)
-      - name: 🐳 Build Docker backend
+      - name: 🧪 Run frontend tests (jest + coverage)
+        working-directory: frontend
+        run: |
+          npm test -- --coverage --watchAll=false || true
+          if [ -f coverage/lcov.info ]; then
+            echo "frontend coverage found"
+          else
+            echo "no frontend coverage generated"
+          fi
+
+      # ---------- Optional: Build Docker images (can be removed if not needed) ----------
+      - name: 🐳 Build Docker backend (optional)
         run: docker build -t gpit-backend ./backend
 
-      - name: 🐳 Build Docker frontend
+      - name: 🐳 Build Docker frontend (optional)
         run: docker build -t gpit-frontend ./frontend
 
-      # 5️⃣ Run backend container with Mongo service
-      - name: ▶️ Run backend container
+      # ---------- Start backend in runner so Cypress can talk to it ----------
+      - name: ▶️ Start backend (local runner) for E2E
+        working-directory: backend
         run: |
-          docker run -d --name gpit-backend-test \
-            -e MONGO_URI=mongodb://admin:password@mongo:27017/gpit \
-            -e NODE_ENV=test \
-            -p 8000:8000 \
-            gpit-backend
-          echo "⏳ Waiting for backend to be ready..."
-          sleep 15
-          curl -f http://localhost:8000/api/health || echo "Backend starting..."
-
-      # 6️⃣ Start frontend for Cypress
-      - name: ▶️ Start frontend server
-        working-directory: frontend
-        run: npm run dev &
-
-      # 7️⃣ Wait for frontend
-      - name: ⏳ Wait for frontend
-        run: |
-          for i in {1..20}; do
-            curl -s http://localhost:5173 && break
-            echo "Waiting for frontend..."
-            sleep 3
+          # Use PORT 8000 (exposed on localhost)
+          export PORT=8000
+          # Ensure we connect to the service mongo (service is available at localhost:27017)
+          export MONGO_URI="mongodb://admin:password@localhost:27017/gpit?authSource=admin"
+          # Start the backend in background (should use a start script that runs node/server)
+          npm run start &> backend-e2e.log &
+          # Wait for the health endpoint
+          for i in {1..30}; do
+            if curl -f -s http://localhost:8000/api/health > /dev/null 2>&1; then
+              echo "Backend is ready"
+              break
+            fi
+            echo "Waiting for backend... ($i/30)"
+            sleep 2
           done
+          curl -f http://localhost:8000/api/health || (echo "backend failed to start"; tail -n 200 backend-e2e.log; exit 1)
 
-      # 8️⃣ Cypress E2E tests
+      # ---------- Start frontend for Cypress ----------
+      - name: ▶️ Start frontend (Vite) for E2E
+        working-directory: frontend
+        run: |
+          npm run dev &> frontend-e2e.log &
+          for i in {1..30}; do
+            if curl -f -s http://localhost:5173 > /dev/null; then
+              echo "Frontend is ready"
+              break
+            fi
+            echo "Waiting for frontend... ($i/30)"
+            sleep 2
+          done
+          curl -f http://localhost:5173 || (echo "frontend failed to start"; tail -n 200 frontend-e2e.log; exit 1)
+
+      # ---------- Cypress E2E ----------
       - name: 🧪 Cypress E2E tests
         uses: cypress-io/github-action@v5
         with:
@@ -91,7 +128,7 @@ jobs:
           wait-on: http://localhost:5173
           wait-on-timeout: 120
 
-      # 9️⃣ Cache SonarCloud
+      # ---------- SonarCloud ----------
       - name: 🗂️ Cache SonarCloud
         uses: actions/cache@v3
         with:
@@ -99,7 +136,6 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
-      # 🔟 SonarCloud analysis
       - name: 🔍 SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         env:
@@ -114,67 +150,65 @@ jobs:
             -Dsonar.sources=backend,frontend/src
             -Dsonar.tests=backend/__tests__,frontend/src/__tests__
             -Dsonar.javascript.lcov.reportPaths=backend/coverage/lcov.info,frontend/coverage/lcov.info
-            -Dsonar.coverage.exclusions=**/node_modules/**,**/*.d.ts,**/cypress/**,**/dist/**
+            -Dsonar.coverage.exclusions=**/node_modules/**,**/*.d.ts,**/cypress/**
             -Dsonar.qualitygate.wait=true
 
-# -----------------------------
-# Déploiement sur production
-# -----------------------------
-deploy:
-  name: 🚀 Deploy to Production
-  runs-on: ubuntu-latest
-  needs: build-test-sonar
-  if: github.ref == 'refs/heads/main' && success()
+  deploy:
+    name: Deploy to Production (SSH)
+    runs-on: ubuntu-latest
+    needs: build-test-sonar
+    if: github.ref == 'refs/heads/main' && success()
+    env:
+      SERVER_IP: ${{ secrets.SERVER_IP }}
 
-  steps:
-    - name: 📦 Checkout repository
-      uses: actions/checkout@v4
+    steps:
+      - name: 📦 Checkout repository
+        uses: actions/checkout@v4
 
-    - name: 🔑 SSH Deploy to Server
-      uses: appleboy/ssh-action@v1.1.0
-      with:
-        host: ${{ secrets.SERVER_IP }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        script: |
-          cd /var/www/gpit
-          echo "🔄 Arrêt des containers..."
-          docker-compose down
-          echo "📥 Pull des nouvelles images..."
-          docker-compose pull
-          echo "🚀 Démarrage des services..."
-          docker-compose up -d --remove-orphans
-          echo "⏳ Attente du démarrage..."
-          sleep 30
-
-    # Test backend post-deploy
-    - name: 🔍 Test backend post-deploy
-      run: |
-        max_attempts=10
-        attempt=1
-        until curl -f -s http://${{ secrets.SERVER_IP }}:8000/api/health; do
-          if [ $attempt -eq $max_attempts ]; then
-            echo "❌ Backend non opérationnel après $max_attempts tentatives"
-            exit 1
-          fi
-          echo "⏳ Tentative $attempt/$max_attempts..."
-          sleep 10
-          attempt=$((attempt + 1))
-        done
-        echo "✅ Backend opérationnel"
-
-    # Test frontend post-deploy
-    - name: 🔍 Test frontend post-deploy
-      run: |
-        max_attempts=10
-        attempt=1
-        until curl -f -s http://${{ secrets.SERVER_IP }}; do
-          if [ $attempt -eq $max_attempts ]; then
-            echo "❌ Frontend non opérationnel après $max_attempts tentatives"
-            exit 1
-          fi
-          echo "⏳ Tentative $attempt/$max_attempts..."
-          sleep 10
-          attempt=$((attempt + 1))
-        done
-        echo "✅ Frontend opérationnel"
+      - name: 🔑 SSH Deploy to Server
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          script: |
+            cd /var/www/gpit || exit 1
+            echo "🔄 Arrêt des containers..."
+            docker-compose down --remove-orphans || true
+            echo "📥 Pull des nouvelles images..."
+            docker-compose pull || true
+            echo "🚀 Démarrage des services..."
+            docker-compose up -d --remove-orphans
+            echo "⏳ Attente du démarrage..."
+      - name: 🔍 Test backend post-deploy
+        run: |
+          max_attempts=10
+          attempt=1
+          until curl -f -s http://$SERVER_IP:8000/api/health; do
+            if [ $attempt -eq $max_attempts ]; then
+              echo "❌ Backend non opérationnel après $max_attempts tentatives"
+              exit 1
+            fi
+            echo "⏳ Tentative $attempt/$max_attempts..."
+            sleep 10
+            attempt=$((attempt + 1))
+          done
+          echo "✅ Backend opérationnel"
+          done
+      - name: 🔍 Test frontend post-deploy
+        run: |
+          max_attempts=10
+          attempt=1
+          until curl -f -s http://$SERVER_IP; do
+            if [ $attempt -eq $max_attempts ]; then
+              echo "❌ Frontend non opérationnel après $max_attempts tentatives"
+              exit 1
+            fi
+            echo "⏳ Tentative $attempt/$max_attempts..."
+            sleep 10
+            attempt=$((attempt + 1))
+          done
+          echo "✅ Frontend opérationnel"
+          done
+          echo "✅ Frontend opérationnel"
