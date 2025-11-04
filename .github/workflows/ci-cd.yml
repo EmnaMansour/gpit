@@ -47,7 +47,7 @@ jobs:
             backend/package-lock.json
             frontend/package-lock.json
 
-      # ---------- BACKEND ----------
+      # Backend
       - name: Install backend dependencies
         working-directory: backend
         run: npm ci
@@ -58,7 +58,7 @@ jobs:
           npm test -- --runInBand --detectOpenHandles --coverage --watchAll=false || true
           if [ -f coverage/lcov.info ]; then echo "Backend coverage OK"; else echo "No backend coverage"; fi
 
-      # ---------- FRONTEND ----------
+      # Frontend
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
@@ -87,6 +87,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Debug secrets (optionnel pour tester que GitHub Secrets sont bien lus)
+      - name: Debug secrets
+        run: |
+          echo "Server IP: ${{ secrets.SERVER_IP }}"
+          echo "Server User: ${{ secrets.SERVER_USER }}"
+
       - name: Deploy via SSH (docker-compose on server)
         uses: appleboy/ssh-action@v1.1.0
         with:
@@ -95,33 +101,33 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             set -e
-            echo " Starting deployment..."
+            echo "🚀 Starting deployment..."
 
             if [ ! -d "/var/www/gpit" ]; then
-              echo " Directory /var/www/gpit does not exist!"
+              echo "❌ Directory /var/www/gpit does not exist!"
               exit 1
             fi
 
             cd /var/www/gpit
-            echo " Changed directory to /var/www/gpit"
+            echo "✅ Changed directory to /var/www/gpit"
 
-            echo " Pulling latest images..."
+            echo "📦 Pulling latest images..."
             docker-compose pull || true
 
-            echo " Stopping current containers..."
+            echo "🛑 Stopping current containers..."
             docker-compose down --remove-orphans || true
 
-            echo " Building and starting containers..."
+            echo "🔧 Building and starting containers..."
             docker-compose up -d --build --remove-orphans
 
-            echo " Waiting for backend to be ready..."
+            echo "⏳ Waiting for backend to be ready..."
             for i in $(seq 1 12); do
               if curl -fsS http://localhost:8000/api/health >/dev/null 2>&1; then
-                echo " Backend OK"
+                echo "✅ Backend OK"
                 break
               fi
               echo "Waiting server... ($i/12)"
               sleep 5
             done
 
-            echo " Deployment completed successfully!"
+            echo "🎉 Deployment completed successfully!"
