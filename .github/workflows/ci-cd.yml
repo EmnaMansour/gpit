@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [ main ]
 
-env:
-  NODE_ENV: test
-
 jobs:
   build-test:
     name: Build & Test Backend and Frontend
@@ -27,14 +24,20 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+    env:
+      NODE_ENV: test
+      MONGO_URI: ${{ secrets.MONGO_URI }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      EMAIL_USER: ${{ secrets.EMAIL_USER }}
+      EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+      HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+
     steps:
-      # Checkout the code
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -72,6 +75,14 @@ jobs:
     needs: build-test
     if: github.ref == 'refs/heads/main' && success()
 
+    env:
+      NODE_ENV: production
+      MONGO_URI: ${{ secrets.MONGO_URI }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      EMAIL_USER: ${{ secrets.EMAIL_USER }}
+      EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+      HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -83,16 +94,34 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd /var/www/gpit || exit 1
+            set -e
+            echo " Starting deployment..."
+
+            if [ ! -d "/var/www/gpit" ]; then
+              echo " Directory /var/www/gpit does not exist!"
+              exit 1
+            fi
+
+            cd /var/www/gpit
+            echo " Changed directory to /var/www/gpit"
+
+            echo " Pulling latest images..."
             docker-compose pull || true
+
+            echo " Stopping current containers..."
             docker-compose down --remove-orphans || true
+
+            echo " Building and starting containers..."
             docker-compose up -d --build --remove-orphans
-            # Wait for backend to be ready
+
+            echo " Waiting for backend to be ready..."
             for i in $(seq 1 12); do
               if curl -fsS http://localhost:8000/api/health >/dev/null 2>&1; then
-                echo "Backend OK"
+                echo " Backend OK"
                 break
               fi
               echo "Waiting server... ($i/12)"
               sleep 5
             done
+
+            echo " Deployment completed successfully!"
