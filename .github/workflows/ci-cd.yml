@@ -1,4 +1,4 @@
-name: CI/CD GPIT - Backend · Frontend · Tests · Deploy
+name: CI/CD GPIT - Backend · Frontend · MongoDB · Deploy
 
 on:
   push:
@@ -35,8 +35,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -87,13 +85,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Debug secrets (optionnel pour tester que GitHub Secrets sont bien lus)
-      - name: Debug secrets
-        run: |
-          echo "Server IP: ${{ secrets.SERVER_IP }}"
-          echo "Server User: ${{ secrets.SERVER_USER }}"
-
-      - name: Deploy via SSH (docker-compose on server)
+      - name: Deploy via SSH (Docker Compose)
         uses: appleboy/ssh-action@v1.1.0
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -103,6 +95,7 @@ jobs:
             set -e
             echo "🚀 Starting deployment..."
 
+            # Vérifier que le dossier existe
             if [ ! -d "/var/www/gpit" ]; then
               echo "❌ Directory /var/www/gpit does not exist!"
               exit 1
@@ -111,7 +104,7 @@ jobs:
             cd /var/www/gpit
             echo "✅ Changed directory to /var/www/gpit"
 
-            echo "📦 Pulling latest images..."
+            echo "📦 Pulling latest Docker images..."
             docker-compose pull || true
 
             echo "🛑 Stopping current containers..."
