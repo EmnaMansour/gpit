@@ -1,1 +1,0 @@
-¯ 2tsX/hr!frontend/src/utils/axiosConfig.ts

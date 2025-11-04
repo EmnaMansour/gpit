@@ -192,17 +192,17 @@ app.use((err, req, res, next) => {
 });
 
 // --- Démarrage du serveur ---
-server.listen(PORT, () => {
-  console.log(' BACKEND GPIT v4.1 - DÉMARRÉ');
-  console.log(` Serveur: http://localhost:${PORT}`);
-  console.log(` Chatbot IA: ${io ? ' Actif' : ' Désactivé'}`);
-  console.log(` MongoDB: ${mongoose.connection.readyState === 1 ? ' Connecté' : ' En attente'}`);
-  console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
+if (require.main == module) {
+  server.listen(PORT, () => {
+    console.log(' BACKEND GPIT v4.1 - DÉMARRÉ');
+    console.log(` Serveur: http://localhost:${PORT}`);
+    console.log(` Chatbot IA: ${io ? ' Actif' : ' Désactivé'}`);
+//    console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(` Service email: ${process.env.EMAIL_USER ? 'Gmail' : 'Ethereal (Test)'}`);
-  console.log(` Actions rapides: http://localhost:${PORT}/api/users/quick-approve/:id`);
-  console.log(` Actions rapides: http://localhost:${PORT}/api/users/quick-reject/:id`);
-
-});
+    console.log(` Actions rapides: http://localhost:${PORT}/api/users/quick-approve/:id`);
+    console.log(` Actions rapides: http://localhost:${PORT}/api/users/quick-reject/:id`);
+  });
+}
 
 // --- Arrêt propre ---
 process.on('SIGINT', async () => {

@@ -15,7 +15,8 @@
     "noUnusedParameters": true,
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
-    "types": ["vite/client"]
+    "types": ["cypress", "node"],
+    //"types": ["vite/client"]
   },
   "include": ["src", "vite.config.ts"],
   "exclude": ["node_modules", "dist"]

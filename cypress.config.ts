@@ -1,20 +1,28 @@
-// cypress.config.ts
-import { defineConfig } from 'cypress'
+import { defineConfig } from "cypress";
 
 export default defineConfig({
+  // ⚠️ Retirez toute la section component si vous ne faites pas de tests de composants
   e2e: {
-    baseUrl: 'http://localhost:5173',
-    defaultCommandTimeout: 30000,  // Augmenté à 30s
-    pageLoadTimeout: 60000,        // Augmenté à 60s  
+    baseUrl: "http://localhost:5173",
+    defaultCommandTimeout: 30000,
+    pageLoadTimeout: 60000,
     responseTimeout: 30000,
-    requestTimeout: 10000,         // Augmenté à 10s
+    requestTimeout: 10000,
     viewportWidth: 1280,
     viewportHeight: 720,
-    specPattern: 'cypress/e2e/**/*.cy.{js,jsx,ts,tsx}',
-    supportFile: false,
+    specPattern: "cypress/e2e/**/*.cy.{js,jsx,ts,tsx}",
+    supportFile: "cypress/support/e2e.ts",
 
     setupNodeEvents(on, config) {
-      return config
+      require("@cypress/code-coverage/task")(on, config);
+      return config;
     },
   },
-})
+
+  component: {
+    devServer: {
+      framework: "react",
+      bundler: "vite",
+    },
+  },
+});

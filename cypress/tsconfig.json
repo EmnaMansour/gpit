@@ -11,5 +11,5 @@
   },
   "include": [
     "**/*.ts"
-  ]
+, "support/component.js"  ]
 }

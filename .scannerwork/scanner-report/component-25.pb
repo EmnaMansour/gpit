@@ -1,1 +1,0 @@
- 2cssXáhr%backend/coverage/lcov-report/base.css

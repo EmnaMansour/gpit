@@ -1,1 +1,0 @@
-¡ 2tsXìhr.frontend/src/pages/Equipment/EquipmentList.tsx

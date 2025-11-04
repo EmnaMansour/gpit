@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Monitor, Server, RefreshCw, Shield, BarChart2, Clock, Zap, Users, Check } from 'lucide-react'
+import { ArrowRight, Users, Monitor, AlertCircle, QrCode, FileText, MessageSquare, BarChart2, Server, Shield, Star, Mail, Phone, MapPin, Send } from 'lucide-react'
 
 export function FeatureSection() {
   const [visibleSections, setVisibleSections] = useState(new Set())
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -20,144 +19,64 @@ export function FeatureSection() {
     document.querySelectorAll('[data-animate]').forEach((el) => {
       observer.observe(el)
     })
-
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePosition({ x: e.clientX, y: e.clientY })
-    }
     
-    document.addEventListener('mousemove', handleMouseMove)
-    
-    return () => {
-      observer.disconnect()
-      document.removeEventListener('mousemove', handleMouseMove)
-    }
+    return () => observer.disconnect()
   }, [])
 
   const features = [
     {
-      icon: Monitor,
-      title: 'Gestion à distance',
-      description: 'Accédez à distance aux ordinateurs et périphériques pour un dépannage instantané sans déplacement sur site.',
+      icon: Users,
+      title: 'Authentification sécurisée',
+      description: 'Connexion sécurisée avec gestion des rôles (Administrateur, Technicien, Employé) et attribution de droits personnalisés.',
       color: 'from-blue-500 to-cyan-400'
     },
     {
-      icon: Server,
-      title: 'Surveillance en temps réel',
-      description: "Surveillez l'état de santé de vos appareils avec des alertes instantanées en cas de problèmes détectés.",
+      icon: Monitor,
+      title: 'Gestion des équipements',
+      description: "Ajout, mise à jour et suivi complet des équipements avec affectation aux utilisateurs et états (disponible, en panne, maintenance).",
       color: 'from-green-500 to-emerald-400'
     },
     {
-      icon: RefreshCw,
-      title: 'Gestion des mises à jour',
-      description: "Déployez et gérez automatiquement les mises à jour logicielles et de sécurité sur l'ensemble du parc.",
+      icon: AlertCircle,
+      title: 'Gestion des incidents',
+      description: "Déclaration, attribution et suivi des tickets d'incidents avec système de notification automatique aux techniciens.",
       color: 'from-purple-500 to-violet-400'
     },
     {
-      icon: Zap,
-      title: 'Automatisation des tâches',
-      description: "Automatisez les tâches répétitives comme l'installation de logiciels ou les configurations système.",
+      icon: BarChart2,
+      title: 'Tableau de bord',
+      description: "Visualisation synthétique avec graphiques et statistiques en temps réel pour tous les acteurs selon leurs droits.",
       color: 'from-orange-500 to-amber-400'
     },
     {
-      icon: BarChart2,
-      title: 'Rapports et analyses',
-      description: "Générez des rapports détaillés sur l'état de votre parc pour une prise de décision éclairée.",
+      icon: FileText,
+      title: 'Rapports et export PDF',
+      description: "Génération de rapports détaillés sur les équipements et incidents avec exportation PDF pour archivage.",
       color: 'from-indigo-500 to-blue-400'
     },
     {
-      icon: Shield,
-      title: 'Sécurité renforcée',
-      description: 'Protégez votre infrastructure avec des fonctionnalités de sécurité avancées et une surveillance des vulnérabilités.',
+      icon: QrCode,
+      title: 'QR Code intelligent',
+      description: 'Génération automatique de QR codes pour chaque équipement permettant un accès rapide aux informations et historiques.',
       color: 'from-red-500 to-pink-400'
     },
     {
-      icon: Clock,
-      title: 'Planification des tâches',
-      description: 'Planifiez des tâches de maintenance en dehors des heures de travail pour minimiser les perturbations.',
+      icon: MessageSquare,
+      title: 'Assistante IA intégrée',
+      description: 'Chatbot intelligent pour aider les visiteurs dans la navigation et répondre aux questions fréquentes.',
       color: 'from-teal-500 to-cyan-400'
     },
     {
-      icon: Users,
-      title: 'Gestion des utilisateurs',
-      description: "Gérez facilement les droits d'accès et les permissions pour chaque membre de votre équipe IT.",
+      icon: Shield,
+      title: 'Notifications automatiques',
+      description: "Système d'alertes pour les administrateurs lors des inscriptions et des déclarations d'incidents importantes.",
       color: 'from-pink-500 to-rose-400'
     }
   ]
 
-  const dashboardFeatures = [
-    'Tableaux de bord personnalisables',
-    'Vues multiples selon les rôles',
-    'Alertes configurables',
-    'Interface responsive pour mobile et tablette'
-  ]
-
   return (
     <div className="py-32 bg-gradient-to-b from-black to-gray-900">
-      {/* Cursor effect */}
-      <div 
-        className="fixed w-6 h-6 rounded-full bg-blue-500/30 pointer-events-none z-50 transition-transform duration-100 ease-out"
-        style={{
-          left: mousePosition.x - 12,
-          top: mousePosition.y - 12,
-          transform: 'scale(1)',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(59, 130, 246, 0.5)'
-        }}
-      />
-
       <div className="container mx-auto px-4">
-        {/* Dashboard Showcase */}
-        <div 
-          className="mb-32 opacity-0 transform translate-y-10 transition-all duration-1000 ease-out"
-          style={{ 
-            opacity: visibleSections.has('dashboard-showcase') ? 1 : 0,
-            transform: visibleSections.has('dashboard-showcase') ? 'translateY(0)' : 'translateY(40px)'
-          }}
-          data-animate
-          id="dashboard-showcase"
-        >
-          <div className="bg-gradient-to-br from-gray-900/80 to-gray-800/40 backdrop-blur-xl rounded-3xl p-12 border border-gray-700/30">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-              <div>
-                <h3 className="text-3xl md:text-4xl font-black mb-6 bg-gradient-to-r from-white to-blue-400 bg-clip-text text-transparent">
-                  Interface intuitive et tableau de bord personnalisable
-                </h3>
-                <p className="text-gray-300 mb-8 text-lg leading-relaxed">
-                  Notre interface utilisateur moderne et intuitive vous permet de visualiser rapidement l'état de votre parc informatique.
-                  Personnalisez votre tableau de bord selon vos besoins spécifiques pour accéder aux informations les plus importantes en un coup d'œil.
-                </p>
-                <ul className="space-y-4">
-                  {dashboardFeatures.map((item, index) => (
-                    <li 
-                      key={index} 
-                      className="flex items-start group hover:translate-x-2 transition-transform duration-300"
-                      style={{ transitionDelay: `${index * 100}ms` }}
-                    >
-                      <Check className="h-6 w-6 text-green-400 mr-3 flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
-                      <span className="text-gray-200 group-hover:text-white transition-colors">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-2xl blur-xl group-hover:blur-2xl transition-all duration-500" />
-                <img
-                  src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=2070&q=80"
-                  alt="Tableau de bord GPIT"
-                  className="relative rounded-2xl shadow-2xl group-hover:scale-105 transition-transform duration-500 w-full"
-                />
-                <div className="absolute -bottom-6 -right-6 bg-gradient-to-br from-gray-900/95 to-gray-800/95 backdrop-blur-xl p-6 rounded-2xl shadow-2xl border border-gray-700/50 group-hover:scale-110 transition-transform duration-300">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-4 h-4 rounded-full bg-gradient-to-r from-green-400 to-green-500 animate-pulse" />
-                    <span className="font-semibold text-white">98% des appareils en ligne</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Features Title */}
         <div 
           className="text-center mb-20 opacity-0 transform translate-y-10 transition-all duration-1000 ease-out"
           style={{ 
@@ -171,11 +90,10 @@ export function FeatureSection() {
             Fonctionnalités complètes
           </h2>
           <p className="text-xl text-gray-400 max-w-3xl mx-auto">
-            Notre plateforme offre tous les outils dont vous avez besoin pour gérer efficacement votre infrastructure informatique
+            Tous les outils nécessaires pour une gestion efficace de votre parc informatique
           </p>
         </div>
 
-        {/* Features Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {features.map((feature, index) => (
             <div 

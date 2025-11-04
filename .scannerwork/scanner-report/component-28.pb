@@ -1,1 +1,0 @@
- 2webXthr'backend/coverage/lcov-report/index.html

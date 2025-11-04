@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ArrowRight, Server, BarChart2, Shield } from 'lucide-react'
+import { ArrowRight, Users, Monitor, AlertCircle } from 'lucide-react'
 
 export function HeroSection() {
   const [visibleSections, setVisibleSections] = useState(new Set())
@@ -33,41 +33,36 @@ export function HeroSection() {
     }
   }, [])
 
-  // Fonction pour faire défiler jusqu'à la section features
   const scrollToFeatures = () => {
     const featuresSection = document.getElementById('features-section')
     if (featuresSection) {
-      featuresSection.scrollIntoView({ 
-        behavior: 'smooth',
-        block: 'start'
-      })
+      featuresSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }
 
   const features = [
     { 
-      icon: Server, 
-      title: 'Gestion à distance', 
-      desc: 'Accédez et contrôlez vos appareils à distance pour résoudre rapidement les problèmes sans déplacement.',
+      icon: Users, 
+      title: 'Gestion des utilisateurs', 
+      desc: 'Création et gestion complète des comptes avec attribution de rôles (Administrateur, Technicien, Employé).',
       gradient: 'from-blue-500 to-cyan-400'
     },
     { 
-      icon: BarChart2, 
-      title: 'Surveillance en temps réel', 
-      desc: "Surveillez l'état de vos appareils en temps réel et détectez les problèmes avant qu'ils n'affectent vos utilisateurs.",
+      icon: Monitor, 
+      title: 'Gestion des équipements', 
+      desc: "Suivi complet de votre parc informatique avec affectation aux utilisateurs et suivi d'état en temps réel.",
       gradient: 'from-green-500 to-emerald-400'
     },
     { 
-      icon: Shield, 
-      title: 'Gestion des mises à jour', 
-      desc: 'Automatisez la gestion des mises à jour logicielles et de sécurité pour maintenir votre parc à jour.',
+      icon: AlertCircle, 
+      title: 'Gestion des incidents', 
+      desc: 'Déclaration et suivi des incidents avec système de tickets et attribution automatique aux techniciens.',
       gradient: 'from-purple-500 to-violet-400'
     }
   ]
 
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-black via-gray-900 to-blue-900 text-white min-h-screen flex items-center">
-      {/* Cursor effect */}
       <div 
         className="fixed w-6 h-6 rounded-full bg-blue-500/30 pointer-events-none z-50 transition-transform duration-100 ease-out"
         style={{
@@ -79,7 +74,6 @@ export function HeroSection() {
         }}
       />
 
-      {/* Animated background */}
       <div className="absolute inset-0">
         {[...Array(25)].map((_, i) => (
           <div
@@ -97,7 +91,6 @@ export function HeroSection() {
 
       <div className="container mx-auto px-4 py-20 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          {/* Hero Content */}
           <div 
             className="opacity-0 transform translate-y-10 transition-all duration-1000 ease-out"
             style={{ 
@@ -108,17 +101,17 @@ export function HeroSection() {
             id="hero-content"
           >
             <div className="inline-block px-4 py-2 bg-blue-600/20 rounded-full text-blue-200 text-sm font-semibold mb-8 backdrop-blur-sm border border-blue-500/20">
-              Solution de surveillance IT
+              Solution de gestion de parc informatique
             </div>
             
             <h1 className="text-5xl lg:text-7xl font-black mb-8 leading-tight bg-gradient-to-r from-white via-blue-200 to-blue-400 bg-clip-text text-transparent">
-              Surveillez et gérez votre parc informatique 
+              Gérez votre parc informatique 
               <span className="block text-blue-400">en toute simplicité</span>
             </h1>
             
             <p className="text-xl md:text-2xl text-gray-300 mb-12 leading-relaxed max-w-2xl">
-              Une solution cloud complète pour les professionnels IT qui souhaitent 
-              <span className="text-blue-400 font-semibold"> superviser, gérer et dépanner</span> à distance tous leurs équipements informatiques.
+              Une solution complète pour la gestion des utilisateurs, équipements et incidents de votre parc informatique avec
+              <span className="text-blue-400 font-semibold"> tableaux de bord, rapports et QR codes</span>.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-6">
@@ -131,10 +124,17 @@ export function HeroSection() {
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </span>
               </button>
+              <button 
+                className="group px-8 py-4 bg-transparent border-2 border-white/30 text-white font-semibold rounded-full hover:bg-white/10 hover:border-white/50 transition-all duration-300 backdrop-blur-sm"
+              >
+                <span className="flex items-center justify-center gap-2">
+                  S'inscrire
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </span>
+              </button>
             </div>
           </div>
 
-          {/* Hero Image */}
           <div 
             className="relative opacity-0 transform translate-y-10 transition-all duration-1000 ease-out"
             style={{ 
@@ -155,14 +155,13 @@ export function HeroSection() {
               <div className="absolute -bottom-6 -right-6 bg-gradient-to-br from-gray-900/95 to-gray-800/95 backdrop-blur-xl p-6 rounded-2xl shadow-2xl border border-gray-700/50 group-hover:scale-110 transition-transform duration-300">
                 <div className="flex items-center space-x-3">
                   <div className="w-4 h-4 rounded-full bg-gradient-to-r from-green-400 to-green-500 animate-pulse" />
-                  <span className="font-semibold text-white">98% des appareils en ligne</span>
+                  <span className="font-semibold text-white">Gestion optimisée</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Features Cards - Ajout de l'ID pour la navigation */}
         <div 
           id="features-section" 
           className="mt-32 grid grid-cols-1 md:grid-cols-3 gap-8"

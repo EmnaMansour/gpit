@@ -1,4 +1,6 @@
-import { defineConfig } from 'cypress'
+import { defineConfig } from 'cypress';
+// @ts-ignore: module has no type declarations or may not be installed in this workspace
+import codeCoverageTask from '@cypress/code-coverage/task';
 
 export default defineConfig({
   e2e: {
@@ -7,7 +9,11 @@ export default defineConfig({
     defaultCommandTimeout: 30000,
     pageLoadTimeout: 60000,
     setupNodeEvents(on, config) {
-      // tu peux ajouter des hooks ici si besoin
+      // 🔥 Active la collecte du code coverage
+      codeCoverageTask(on, config);
+
+      return config;
     },
+    supportFile: 'cypress/support/e2e.ts',
   },
-})
+});

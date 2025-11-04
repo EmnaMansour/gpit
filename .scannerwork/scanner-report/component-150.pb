@@ -1,1 +1,0 @@
-– 2tsXîhr&frontend/src/components/TrialModal.tsx

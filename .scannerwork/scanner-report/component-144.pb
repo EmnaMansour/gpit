@@ -1,1 +1,0 @@
-ê 2tsXóhr0frontend/src/components/modals/IncidentModal.tsx

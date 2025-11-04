@@ -202,7 +202,7 @@ export function About() {
       </div>
 
       {/* Mission Section */}
-      <div className="py-32 bg-gradient-to-b from-black to-gray-900">
+       <div className="py-32 bg-gradient-to-b from-black to-gray-900">
         <div className="container mx-auto px-4">
           <div 
             className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center opacity-0 transform translate-y-10 transition-all duration-1000 ease-out"
@@ -219,13 +219,13 @@ export function About() {
               </h2>
               <div className="space-y-6 text-lg text-gray-300 leading-relaxed">
                 <p>
-                  Chez GPIT, notre mission est de <span className="text-blue-400 font-semibold">simplifier la gestion</span> des infrastructures informatiques pour les professionnels IT. Nous croyons que la technologie devrait être un facilitateur et non un obstacle pour les entreprises.
+                  GPIT est une <span className="text-blue-400 font-semibold">plateforme complète de gestion de parc informatique</span> conçue pour simplifier la vie des équipes IT. Notre mission est de fournir aux entreprises les outils nécessaires pour gérer efficacement leurs ressources informatiques.
                 </p>
                 <p>
-                  Fondée en 2015 par une équipe d'experts en IT, GPIT est née de la frustration face aux solutions de surveillance existantes qui étaient soit <span className="text-blue-400 font-semibold">trop complexes, soit trop limitées</span>.
+                  Nous centralisons la <span className="text-blue-400 font-semibold">gestion des utilisateurs, des équipements et des incidents</span> dans une interface intuitive, tout en offrant des fonctionnalités avancées comme les QR codes, les rapports PDF et un tableau de bord en temps réel.
                 </p>
                 <p>
-                  Aujourd'hui, nous servons plus de <span className="text-blue-400 font-semibold">1000 entreprises dans 30 pays</span>, aidant les équipes IT à gagner du temps, à réduire les coûts et à améliorer la fiabilité de leurs systèmes.
+                  Avec GPIT, les administrateurs peuvent <span className="text-blue-400 font-semibold">gérer les rôles et permissions</span>, les techniciens peuvent traiter les incidents efficacement, et les employés peuvent déclarer les problèmes en toute simplicité.
                 </p>
               </div>
             </div>
@@ -237,8 +237,8 @@ export function About() {
                 className="relative rounded-3xl shadow-2xl group-hover:scale-105 transition-transform duration-500"
               />
               <div className="absolute -bottom-8 -right-8 bg-gradient-to-br from-blue-600 to-blue-500 text-white p-8 rounded-2xl shadow-2xl group-hover:scale-110 transition-transform duration-300">
-                <p className="text-3xl font-black">8+ ans</p>
-                <p className="text-blue-100">d'excellence</p>
+                {/* <p className="text-3xl font-black">2024</p> */}
+                <p className="text-blue-100">Solution moderne</p>
               </div>
             </div>
           </div>

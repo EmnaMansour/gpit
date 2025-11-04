@@ -1,1 +1,0 @@
-_ 2jsX5hrbackend/models/Equipement.js

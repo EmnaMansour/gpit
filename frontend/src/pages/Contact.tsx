@@ -11,8 +11,9 @@ const sendContactMessage = async (formData: {
   
   try {
     // Configuration de l'URL API
-    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-    const url = `${API_BASE}/api/contacts`; // Note: /contacts pas /contact
+const API_BASE = 'http://13.218.77.59/api';
+const url = `${API_BASE}/contacts`;
+
     
     console.log('🌐 URL de la requête:', url);
     
