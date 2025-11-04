@@ -54,7 +54,7 @@ jobs:
         working-directory: backend
         run: |
           npm test -- --runInBand --detectOpenHandles --coverage --watchAll=false || true
-          if [ -f coverage/lcov.info ]; then echo "Backend coverage OK"; else echo "No backend coverage"; fi
+          if [ -f coverage/lcov.info ]; then echo "✅ Backend coverage OK"; else echo "⚠️ No backend coverage"; fi
 
       # Frontend
       - name: Install frontend dependencies
@@ -65,7 +65,7 @@ jobs:
         working-directory: frontend
         run: |
           npm test -- --runInBand --coverage --watchAll=false || true
-          if [ -f coverage/lcov.info ]; then echo "Frontend coverage OK"; else echo "No frontend coverage"; fi
+          if [ -f coverage/lcov.info ]; then echo "✅ Frontend coverage OK"; else echo "⚠️ No frontend coverage"; fi
 
   deploy:
     name: Deploy via SSH
@@ -85,6 +85,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # SSH Deployment
       - name: Deploy via SSH (Docker Compose)
         uses: appleboy/ssh-action@v1.1.0
         with:
@@ -95,7 +96,7 @@ jobs:
             set -e
             echo "🚀 Starting deployment..."
 
-            # Vérifier que le dossier existe
+            # Vérifier le dossier
             if [ ! -d "/var/www/gpit" ]; then
               echo "❌ Directory /var/www/gpit does not exist!"
               exit 1
