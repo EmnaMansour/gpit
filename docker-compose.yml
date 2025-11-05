@@ -48,7 +48,7 @@ services:
     networks:
       - app-network
 
-  # Agent Python (envoie des métriques vers InfluxDB)
+  # Agent Python (collecte métriques CPU/RAM et envoie vers InfluxDB)
   agent:
     build: ./backend/agent
     container_name: agent
@@ -56,17 +56,16 @@ services:
     depends_on:
       - backend
       - influxdb
+    network_mode: "host"   # Permet de surveiller l'hôte directement
     environment:
-      - API_INCIDENT=http://backend:8000/api/incidents
-      - BACKEND_URL=http://backend:8000
-      - INFLUX_URL=http://influxdb:8086
+      - API_INCIDENT=http://localhost:8081/api/incidents
+      - BACKEND_URL=http://localhost:8081
+      - INFLUX_URL=http://localhost:8086
       - INFLUX_TOKEN=supersecrettoken
       - INFLUX_ORG=gpit
       - INFLUX_BUCKET=metrics
-    networks:
-      - app-network
 
-  # InfluxDB (base de données de métriques)
+  # InfluxDB (base de données métriques)
   influxdb:
     image: influxdb:2.7
     container_name: influxdb
@@ -85,7 +84,7 @@ services:
     networks:
       - app-network
 
-  # Grafana (visualisation des métriques)
+  # Grafana (visualisation métriques)
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
@@ -122,7 +121,7 @@ services:
       npx cypress open;
       tail -f /dev/null
 
-  # SonarQube pour la qualité du code
+  # SonarQube pour qualité du code
   sonarqube:
     image: sonarqube:community
     container_name: sonarqube
