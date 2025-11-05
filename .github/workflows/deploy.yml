@@ -1,0 +1,63 @@
+name: CI/CD - GPIT Full Stack
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io/${{ github.repository_owner }}
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    # ✅ Backend Build + Test
+    - name: Install backend deps
+      run: |
+        cd backend
+        npm ci
+    - name: Build backend
+      run: |
+        cd backend
+        npm run build
+
+    # ✅ Frontend Build
+    - name: Install frontend deps
+      run: |
+        cd frontend
+        npm ci
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+
+  deploy:
+    needs: build-test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Deploy to EC2 via SSH
+      uses: appleboy/ssh-action@v1.1.0
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          cd /home/ubuntu/gpit
+          git pull origin main
+          docker compose down
+          docker compose build --no-cache
+          docker compose up -d
+          docker image prune -f
