@@ -5,6 +5,8 @@ const cors = require('cors');
 const path = require('node:path');
 const http = require('node:http');
 const fs = require('node:fs');
+const qrScanRoutes = require('./routes/qrScanRoutes');
+
 
 
 // 🔧 Chargement dynamique de l'environnement
@@ -83,7 +85,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/contacts', contactRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/users', require('./routes/quickActions')); // Ajoutez cette ligne
-
+app.use('/scan', qrScanRoutes);  // Route PUBLIQUE pour scanner les QR codes
 
 // --- Fichiers statiques ---
 app.use('/qrCodes', express.static(path.join(__dirname, 'qrCodes')));
@@ -193,9 +195,9 @@ app.use((err, req, res, next) => {
 
 // --- Démarrage du serveur ---
 if (require.main == module) {
-  server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
     console.log(' BACKEND GPIT v4.1 - DÉMARRÉ');
-    console.log(` Serveur: http://localhost:${PORT}`);
+  console.log(` Serveur: http://0.0.0.0:${PORT}`);
     console.log(` Chatbot IA: ${io ? ' Actif' : ' Désactivé'}`);
 //    console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(` Service email: ${process.env.EMAIL_USER ? 'Gmail' : 'Ethereal (Test)'}`);

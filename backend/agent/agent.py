@@ -31,12 +31,12 @@ except Exception:
 # ==============================
 # CONFIGURATION (modifiable)
 # ==============================
-BACKEND_URL = "http://192.168.50.1:8000"
+BACKEND_URL = "http://localhost:8000"
 LOGIN_ENDPOINT = "/api/users/login"
 INCIDENT_ENDPOINT = "/api/incidents"
 
 ADMIN_EMAIL = "admin@gmail.com"
-ADMIN_PASSWORD = "admin"
+ADMIN_PASSWORD = "admin123"
 
 CHECK_INTERVAL = 10
 COOLDOWN_SECONDS = 300
