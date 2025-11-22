@@ -1,6 +1,5 @@
 name: Deploy GPIT to EC2
 
-# Déclenchement à chaque push sur la branche main
 on:
   push:
     branches: ["main"]
@@ -11,11 +10,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1️⃣ Récupérer le code
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # 2️⃣ Déployer sur le serveur EC2 via SSH
     - name: Deploy to EC2
       uses: appleboy/ssh-action@master
       with:
@@ -28,12 +25,12 @@ jobs:
           git pull origin main
 
           echo "🛑 Stop existing containers"
-          docker compose down
+          sudo docker-compose down
 
           echo "🚀 Build & start containers"
-          docker compose up -d --build
+          sudo docker-compose up -d --build
 
           echo "🧹 Clean unused images"
-          docker image prune -f
+          sudo docker image prune -f
 
           echo "✅ Deployment completed"
