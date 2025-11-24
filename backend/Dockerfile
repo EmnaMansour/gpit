@@ -4,9 +4,10 @@ WORKDIR /app
 
 COPY package*.json tsconfig.json ./
 RUN npm install
+RUN npm install typescript --save-dev
 
 COPY . .
-RUN npm run build
+RUN npx tsc  # compile le TS en JS dans /dist
 
 # Étape runtime
 FROM node:20
