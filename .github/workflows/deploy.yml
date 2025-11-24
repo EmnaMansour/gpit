@@ -1,60 +1,32 @@
-name: Build and Push Docker Images
+name: Deploy to EC2
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
-  backend:
-    name: Build & Push Backend
+  deploy:
     runs-on: ubuntu-latest
-    env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
-      BACKEND_IMAGE: yourdockerhubusername/backend:latest
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      # Étape 1 : Récupérer le code
+      - uses: actions/checkout@v4
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+      # Étape 2 : Déploiement via SSH
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          host: ${{ secrets.EC2_HOST }}       # IP publique EC2
+          username: ubuntu                    # Utilisateur SSH
+          key: ${{ secrets.GPIT_KEY }}       # Clé privée SSH stockée comme secret
+          port: 22
+          script: |
+            # Aller dans le dossier ou cloner le repo
+            cd ~/gpit || git clone https://github.com/EmnaMansour/gpit.git
+            cd gpit
 
-      - name: Build and push backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          push: true
-          tags: ${{ env.BACKEND_IMAGE }}
+            # Mettre à jour le code
+            git pull
 
-  frontend:
-    name: Build & Push Frontend
-    runs-on: ubuntu-latest
-    env:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
-      FRONTEND_IMAGE: yourdockerhubusername/frontend:latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-
-      - name: Build and push frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
-          push: true
-          tags: ${{ env.FRONTEND_IMAGE }}
+            # Construire et démarrer les conteneurs Docker
+            docker-compose up -d --build
