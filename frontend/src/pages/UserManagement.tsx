@@ -509,7 +509,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, user, mode, onSu
               </>
             )}
             
-            {mode === 'edit' && (
+            {/* {mode === 'edit' && (
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Nouveau mot de passe (optionnel)
@@ -537,7 +537,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, user, mode, onSu
                   Laissez vide pour conserver le mot de passe actuel
                 </p>
               </div>
-            )}
+            )} */}
 
             <div className="flex justify-end space-x-3 pt-4 border-t border-gray-700">
               <button 
