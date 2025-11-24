@@ -1,4 +1,4 @@
-name: Deploy to EC2
+name: Deploy to EC2 with Docker
 
 on:
   push:
@@ -9,24 +9,30 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Étape 1 : Récupérer le code (fondamental)
       - uses: actions/checkout@v4
 
-      # Étape 2 : Déploiement via SSH
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v0.1.6
         with:
-          host: ${{ secrets.EC2_HOST }}       # IP publique EC2
-          username: ubuntu                    # Utilisateur SSH
-          key: ${{ secrets.GPIT_KEY }}        # Clé privée SSH
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.GPIT_KEY }}
           port: 22
           script: |
-            # Supprimer l'ancien dossier
-            rm -rf ~/gpit
+            cd ~
+            rm -rf gpit
+            git clone https://github.com/EmnaMansour/gpit.git
+            cd gpit
 
-            # Cloner proprement la dernière version
-            git clone https://github.com/EmnaMansour/gpit.git ~/gpit
-            cd ~/gpit
+            # Créer le .env pour backend
+            echo "MONGO_URI=${{ secrets.MONGO_URI }}" > ./backend/.env
+            echo "PORT=${{ secrets.PORT }}" >> ./backend/.env
+            echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> ./backend/.env
+            echo "EMAIL_USER=${{ secrets.EMAIL_USER }}" >> ./backend/.env
+            echo "EMAIL_PASS=${{ secrets.EMAIL_PASS }}" >> ./backend/.env
+            echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" >> ./frontend/.env
 
-            # Installer / redémarrer Docker Compose
-            docker-compose up -d --build
+            # Déployer avec Docker
+            docker-compose down
+            docker-compose build
+            docker-compose up -d
