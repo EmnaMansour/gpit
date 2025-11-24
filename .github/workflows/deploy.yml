@@ -1,4 +1,4 @@
-name: Deploy to EC2 with Docker
+name: Deploy to EC2
 
 on:
   push:
@@ -9,30 +9,41 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Récupérer le code
       - uses: actions/checkout@v4
 
+      # 2️⃣ Déploiement via SSH
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v0.1.6
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.GPIT_KEY }}
+          host: ${{ secrets.EC2_HOST }}       # IP publique EC2
+          username: ubuntu                    # Utilisateur SSH
+          key: ${{ secrets.GPIT_KEY }}        # Clé privée SSH
           port: 22
           script: |
+            # Supprimer l'ancien dossier en sudo (pour éviter les problèmes de permission)
             cd ~
-            rm -rf gpit
+            sudo rm -rf gpit
+
+            # Cloner le repo
             git clone https://github.com/EmnaMansour/gpit.git
             cd gpit
 
-            # Créer le .env pour backend
+            # Créer le dossier backend si nécessaire
+            mkdir -p ./backend
+
+            # Créer le fichier .env pour le backend et frontend avec secrets GitHub
             echo "MONGO_URI=${{ secrets.MONGO_URI }}" > ./backend/.env
             echo "PORT=${{ secrets.PORT }}" >> ./backend/.env
             echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> ./backend/.env
             echo "EMAIL_USER=${{ secrets.EMAIL_USER }}" >> ./backend/.env
             echo "EMAIL_PASS=${{ secrets.EMAIL_PASS }}" >> ./backend/.env
-            echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" >> ./frontend/.env
+            echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" > ./frontend/.env
 
             # Déployer avec Docker
             docker-compose down
             docker-compose build
             docker-compose up -d
+          
+          timeout: 10m
+          debug: true
