@@ -7,80 +7,86 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # ⏱️ Augmenter le timeout global
+    timeout-minutes: 10
     
     steps:
-      # 1️⃣ Récupérer le code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
 
-      # 3️⃣ Build Backend
       - name: Build Backend
         run: |
           cd backend
           npm install
           npm run build -- --skipLibCheck
 
-      # 4️⃣ Build Frontend
       - name: Build Frontend
         run: |
           cd frontend
           npm install
           npm run build
 
-      # 5️⃣ Déploiement via SSH - CORRIGÉ
-      - name: Deploy to EC2 via SSH
+      - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.GPIT_KEY }}
           port: 22
-          command_timeout: 2m # ⏱️ Timeout par commande
+          timeout: 120s
           script: |
-            echo "🚀 Testing SSH connection..."
-            whoami
-            pwd
+            set -e
+            echo " Starting deployment..."
+            cd ~
             
-            echo "📦 Checking existing deployment..."
+            # Backup et cleanup
             if [ -d "gpit" ]; then
-              echo "💾 Backing up environment files..."
-              cp gpit/backend/.env backend_env_backup 2>/dev/null || true
-              cp gpit/frontend/.env frontend_env_backup 2>/dev/null || true
-              echo "🗑️ Removing old deployment..."
+              echo " Backing up environment files..."
+              cp gpit/backend/.env /tmp/backend_env.backup 2>/dev/null || true
+              cp gpit/frontend/.env /tmp/frontend_env.backup 2>/dev/null || true
+              echo " Removing old deployment..."
               sudo rm -rf gpit
             fi
             
-            echo "📥 Cloning repository..."
+            # Clone repo
+            echo " Cloning repository..."
             git clone https://github.com/EmnaMansour/gpit.git
             cd gpit
             
-            echo "🔧 Setting up environment files..."
+            # Create environment files avec printf (alternative aux HERE-documents)
+            echo " Setting up environment files..."
+            
             # Backend .env
-            cat > ./backend/.env << EOF
-            MONGO_URI=${{ secrets.MONGO_URI }}
-            PORT=${{ secrets.PORT }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            EMAIL_USER=${{ secrets.EMAIL_USER }}
-            EMAIL_PASS=${{ secrets.EMAIL_PASS }}
-            EOF
+            printf "MONGO_URI=${{ secrets.MONGO_URI }}\nPORT=${{ secrets.PORT }}\nJWT_SECRET=${{ secrets.JWT_SECRET }}\nEMAIL_USER=${{ secrets.EMAIL_USER }}\nEMAIL_PASS=${{ secrets.EMAIL_PASS }}\n" > ./backend/.env
             
             # Frontend .env
-            cat > ./frontend/.env << EOF
-            VITE_API_URL=${{ secrets.VITE_API_URL }}
-            EOF
+            printf "VITE_API_URL=${{ secrets.VITE_API_URL }}\n" > ./frontend/.env
             
-            echo "🐳 Starting Docker deployment..."
+            # Docker deployment
+            echo "Starting Docker deployment..."
+            echo " Stopping existing containers..."
             docker-compose down || true
+            echo " Cleaning Docker resources..."
+            docker system prune -f || true
+            echo " Building Docker images..."
             docker-compose build --no-cache
+            echo " Starting services..."
             docker-compose up -d
-            
-            echo "✅ Deployment completed!"
+            echo " Waiting for services to be healthy..."
+            sleep 10
+            echo " Deployment completed!"
+            echo " Checking running containers:"
             docker ps
+            echo " Checking container status:"
+            docker-compose ps
+            echo " Checking recent logs:"
+            docker-compose logs --tail=20
+            echo " Application deployed successfully!"
