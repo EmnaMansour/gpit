@@ -7,6 +7,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # ⏱️ Augmenter le timeout global
     
     steps:
       # 1️⃣ Récupérer le code
@@ -19,30 +20,22 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: |
-            backend/package-lock.json
-            frontend/package-lock.json
 
-      # 3️⃣ Build Backend (Node.js) - AVEC npm install
+      # 3️⃣ Build Backend
       - name: Build Backend
         run: |
           cd backend
-          echo "📦 Installing dependencies..."
           npm install
-          echo "🏗️ Building TypeScript application..."
-          npm run build
-          echo "🧹 Cleaning up node_modules..."
-          rm -rf node_modules
+          npm run build -- --skipLibCheck
 
-      # 4️⃣ Build Frontend (React)  
+      # 4️⃣ Build Frontend
       - name: Build Frontend
         run: |
           cd frontend
           npm install
           npm run build
-          rm -rf node_modules
 
-      # 5️⃣ Déploiement via SSH
+      # 5️⃣ Déploiement via SSH - CORRIGÉ
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -50,48 +43,44 @@ jobs:
           username: ubuntu
           key: ${{ secrets.GPIT_KEY }}
           port: 22
+          command_timeout: 2m # ⏱️ Timeout par commande
           script: |
-            echo "🚀 Starting deployment..."
-            cd ~
+            echo "🚀 Testing SSH connection..."
+            whoami
+            pwd
             
-            # Sauvegarder les anciens .env
+            echo "📦 Checking existing deployment..."
             if [ -d "gpit" ]; then
-              echo "📦 Saving existing environment files..."
+              echo "💾 Backing up environment files..."
               cp gpit/backend/.env backend_env_backup 2>/dev/null || true
               cp gpit/frontend/.env frontend_env_backup 2>/dev/null || true
+              echo "🗑️ Removing old deployment..."
+              sudo rm -rf gpit
             fi
             
-            # Supprimer l'ancien dossier
-            sudo rm -rf gpit
-            
-            # Cloner le repo
             echo "📥 Cloning repository..."
             git clone https://github.com/EmnaMansour/gpit.git
             cd gpit
             
-            # Restaurer les .env ou créer les nouveaux
             echo "🔧 Setting up environment files..."
-            if [ -f ../backend_env_backup ]; then
-              cp ../backend_env_backup ./backend/.env
-            else
-              echo "MONGO_URI=${{ secrets.MONGO_URI }}" > ./backend/.env
-              echo "PORT=${{ secrets.PORT }}" >> ./backend/.env
-              echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> ./backend/.env
-              echo "EMAIL_USER=${{ secrets.EMAIL_USER }}" >> ./backend/.env
-              echo "EMAIL_PASS=${{ secrets.EMAIL_PASS }}" >> ./backend/.env
-            fi
+            # Backend .env
+            cat > ./backend/.env << EOF
+            MONGO_URI=${{ secrets.MONGO_URI }}
+            PORT=${{ secrets.PORT }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            EMAIL_USER=${{ secrets.EMAIL_USER }}
+            EMAIL_PASS=${{ secrets.EMAIL_PASS }}
+            EOF
             
-            if [ -f ../frontend_env_backup ]; then
-              cp ../frontend_env_backup ./frontend/.env
-            else
-              echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" > ./frontend/.env
-            fi
+            # Frontend .env
+            cat > ./frontend/.env << EOF
+            VITE_API_URL=${{ secrets.VITE_API_URL }}
+            EOF
             
-            # Déployer avec Docker
             echo "🐳 Starting Docker deployment..."
-            docker-compose down
+            docker-compose down || true
             docker-compose build --no-cache
             docker-compose up -d
             
-            echo "✅ Deployment completed successfully!"
+            echo "✅ Deployment completed!"
             docker ps
