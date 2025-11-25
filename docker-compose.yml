@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   # Backend Node.js
   backend:
@@ -5,11 +7,16 @@ services:
     container_name: backend
     restart: unless-stopped
     env_file:
-      - ./backend/.env   # Contient MONGO_URI vers Atlas
+      - ./backend/.env
     ports:
       - "8081:8000"
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # Frontend Vite/React
   frontend:
@@ -17,11 +24,12 @@ services:
     container_name: frontend
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "5173:80"
     environment:
-    - VITE_API_URL=http://44.210.225.211:8081
+      - VITE_API_URL=http://44.210.225.211:8081
     networks:
       - app-network
 
@@ -33,7 +41,7 @@ services:
     depends_on:
       - backend
       - influxdb
-    network_mode: "host"   # Permet de surveiller l'hôte directement
+    network_mode: "host"
     environment:
       - API_INCIDENT=http://localhost:8081/api/incidents
       - BACKEND_URL=http://localhost:8081
@@ -41,6 +49,8 @@ services:
       - INFLUX_TOKEN=supersecrettoken
       - INFLUX_ORG=gpit
       - INFLUX_BUCKET=metrics
+    volumes:
+      - /:/host:ro
 
   # InfluxDB (base de données métriques)
   influxdb:
@@ -74,8 +84,10 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
     networks:
       - app-network
 
@@ -90,13 +102,10 @@ services:
       - ./frontend:/app
     environment:
       - CYPRESS_baseUrl=http://frontend:5173
-    entrypoint: ["sh", "-c"]
-    command: >
-      echo 'Waiting for frontend...';
-      until curl -s http://frontend:5173 > /dev/null; do sleep 2; done;
-      echo 'Frontend ready, starting Cypress in interactive mode';
-      npx cypress open;
-      tail -f /dev/null
+    networks:
+      - app-network
+    profiles:
+      - test
 
   # SonarQube pour qualité du code
   sonarqube:
@@ -107,12 +116,22 @@ services:
       - "9000:9000"
     environment:
       - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+      - SONAR_JDBC_URL=jdbc:postgresql://localhost:5432/sonar
+      - SONAR_JDBC_USERNAME=sonar
+      - SONAR_JDBC_PASSWORD=sonar
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
     networks:
       - app-network
+    profiles:
+      - analysis
 
 volumes:
   influxdb_data:
   grafana_data:
+  sonarqube_data:
+  sonarqube_extensions:
 
 networks:
   app-network:
