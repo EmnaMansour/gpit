@@ -136,7 +136,7 @@ jobs:
             
             # Builder et démarrer
             echo "🏗️ Building Docker images (this may take a few minutes)..."
-            docker-compose build --no-cache --progress=plain
+            docker-compose build --no-cache
             
             if [ $? -ne 0 ]; then
               echo "❌ Docker build failed!"
