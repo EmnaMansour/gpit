@@ -3,12 +3,12 @@ name: Deploy to EC2
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     
     steps:
       - name: Checkout code
@@ -31,19 +31,6 @@ jobs:
           npm install
           npm run build
 
-      - name: Test SSH Connection
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.GPIT_KEY }}
-          port: 22
-          timeout: 30s
-          script: |
-            echo "SSH connection successful!"
-            echo "Host: $(hostname)"
-            echo "User: $(whoami)"
-
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -51,7 +38,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.GPIT_KEY }}
           port: 22
-          timeout: 300s
+          timeout: 120s
           command_timeout: 15m
           script: |
             set -e
