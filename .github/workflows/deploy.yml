@@ -12,17 +12,13 @@ jobs:
     timeout-minutes: 10
     
     steps:
-      - name: Checkout code (without submodules)
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          submodules: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
 
       - name: Build Backend
         run: |
@@ -34,19 +30,16 @@ jobs:
     name: Build Frontend (React)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: build-backend
     
     steps:
-      - name: Checkout code (without submodules)
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          submodules: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Build Frontend
         run: |
@@ -72,107 +65,131 @@ jobs:
           command_timeout: 20m
           script: |
             set -e
-            echo " Starting deployment at $(date)..."
+            echo "🚀 Starting deployment at $(date)..."
             cd ~
             
             # Backup et cleanup
             if [ -d "gpit" ]; then
-              echo " Backing up environment files..."
+              echo "💾 Backing up environment files..."
               cp gpit/backend/.env /tmp/backend_env.backup 2>/dev/null || true
               cp gpit/frontend/.env /tmp/frontend_env.backup 2>/dev/null || true
-              echo " Removing old deployment..."
+              echo "🗑️ Removing old deployment..."
               sudo rm -rf gpit
             fi
             
             # Clone repo
-            echo " Cloning repository..."
+            echo "📥 Cloning repository..."
             git clone https://github.com/EmnaMansour/gpit.git
             cd gpit
             
             # Create environment files
-            echo " Setting up environment files..."
+            echo "🔧 Setting up environment files..."
             
             # Backend .env
-            printf "MONGO_URI=${{ secrets.MONGO_URI }}\nPORT=${{ secrets.PORT }}\nJWT_SECRET=${{ secrets.JWT_SECRET }}\nEMAIL_USER=${{ secrets.EMAIL_USER }}\nEMAIL_PASS=${{ secrets.EMAIL_PASS }}\n" > ./backend/.env
+            cat > ./backend/.env << EOF
+            MONGO_URI=${{ secrets.MONGO_URI }}
+            PORT=${{ secrets.PORT }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            EMAIL_USER=${{ secrets.EMAIL_USER }}
+            EMAIL_PASS=${{ secrets.EMAIL_PASS }}
+            EOF
             
             # Frontend .env
-            printf "VITE_API_URL=${{ secrets.VITE_API_URL }}\n" > ./frontend/.env
+            cat > ./frontend/.env << EOF
+            VITE_API_URL=${{ secrets.VITE_API_URL }}
+            EOF
             
-            echo " Environment files created successfully"
+            echo "📋 Environment files created successfully"
             
             # Docker deployment
-            echo " Starting Docker deployment..."
+            echo "🐳 Starting Docker deployment..."
             
             # Vérifier que Docker est installé
             if ! command -v docker &> /dev/null; then
-              echo " Docker is not installed!"
+              echo "❌ Docker is not installed!"
               exit 1
             fi
             
             if ! command -v docker-compose &> /dev/null; then
-              echo " Docker Compose is not installed!"
+              echo "❌ Docker Compose is not installed!"
               exit 1
             fi
             
-            echo " Docker version: $(docker --version)"
-            echo " Docker Compose version: $(docker-compose --version)"
+            echo "✅ Docker version: $(docker --version)"
+            echo "✅ Docker Compose version: $(docker-compose --version)"
             
             # Arrêter et supprimer TOUS les containers et réseaux
-            echo " Stopping all containers..."
+            echo "🔻 Stopping all containers..."
             docker-compose down -v --remove-orphans 2>/dev/null || true
             
             # Supprimer les containers orphelins
-            echo " Cleaning orphaned containers..."
+            echo "🧹 Cleaning orphaned containers..."
             docker ps -aq | xargs -r docker rm -f 2>/dev/null || true
             
             # Supprimer les réseaux orphelins
-            echo " Cleaning orphaned networks..."
+            echo "🔌 Cleaning orphaned networks..."
             docker network prune -f 2>/dev/null || true
             
             # Nettoyer les images non utilisées
-            echo " Cleaning unused images..."
+            echo "🗑️ Cleaning unused images..."
             docker image prune -af 2>/dev/null || true
             
             # Builder et démarrer
-            echo " Building Docker images (this may take a few minutes)..."
+            echo "🏗️ Building Docker images (this may take a few minutes)..."
             docker-compose build --no-cache
             
-            echo " Starting services..."
+            if [ $? -ne 0 ]; then
+              echo "❌ Docker build failed!"
+              exit 1
+            fi
+            
+            echo "🚀 Starting services..."
             docker-compose up -d
             
+            if [ $? -ne 0 ]; then
+              echo "❌ Failed to start services!"
+              docker-compose logs
+              exit 1
+            fi
+            
             # Attendre que les services démarrent
-            echo " Waiting for services to start..."
-            sleep 15
+            echo "⏳ Waiting for services to start..."
+            sleep 10
             
             # Vérifier l'état des containers
             echo ""
-            echo " Container status:"
+            echo "📊 Container status:"
             docker-compose ps
             
             echo ""
-            echo " Running containers:"
+            echo "🐳 Running containers:"
             docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
             
             # Vérifier que les containers sont bien running
             RUNNING_CONTAINERS=$(docker-compose ps -q | wc -l)
             if [ "$RUNNING_CONTAINERS" -eq 0 ]; then
               echo ""
-              echo " No containers are running!"
-              echo " Recent logs:"
+              echo "❌ No containers are running!"
+              echo "📋 Recent logs:"
               docker-compose logs --tail=50
               exit 1
             fi
             
             echo ""
-            echo " Deployment completed successfully at $(date)!"
-            echo " $RUNNING_CONTAINERS container(s) running"
+            echo "✅ Deployment completed successfully at $(date)!"
+            echo "✅ $RUNNING_CONTAINERS container(s) running"
 
       - name: Deployment Status
         if: always()
         run: |
           if [ "${{ job.status }}" == "success" ]; then
-            echo " Deployment succeeded!"
-            echo " Your application is now live!"
+            echo "✅ Deployment succeeded!"
+            echo "🎉 Your application is now live!"
           else
-            echo " Deployment failed. Check the logs above."
+            echo "❌ Deployment failed. Check the logs above."
+            echo "💡 Common issues:"
+            echo "  - Check if EC2 security group allows SSH (port 22)"
+            echo "  - Verify all GitHub secrets are correctly set"
+            echo "  - Ensure Docker and Docker Compose are installed on EC2"
+            echo "  - Check if there's enough disk space on EC2"
           fi
