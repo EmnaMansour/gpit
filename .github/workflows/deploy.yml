@@ -3,9 +3,11 @@ name: Deploy to EC2
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  deploy:
+  build-backend:
+    name: Build Backend (Node.js)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     
@@ -18,19 +20,41 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Build Backend (Node.js)
+      - name: Build Backend
         run: |
           cd backend
           npm install
           npm run build -- --skipLibCheck
 
-      - name: Build Frontend (React)
+  build-frontend:
+    name: Build Frontend (React)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build-backend
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Frontend
         run: |
           cd frontend
           npm install
           npm run build
 
-      - name: Deploiement sur EC2
+  deploy:
+    name: Déploiement sur EC2 avec Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build-backend, build-frontend]
+    
+    steps:
+      - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -91,3 +115,12 @@ jobs:
             echo "✅ Deployment completed!"
             sleep 5
             docker ps
+
+      - name: Deployment Status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Deployment succeeded!"
+          else
+            echo "❌ Deployment failed. Check the logs above."
+          fi
