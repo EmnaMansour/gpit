@@ -13,30 +13,33 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Setup Node.js pour les builds
+      # 2️⃣ Setup Node.js version compatible
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'  # Version compatible avec Cypress
           cache: 'npm'
           cache-dependency-path: |
             backend/package-lock.json
             frontend/package-lock.json
 
-      # 3️⃣ Build Backend (Node.js)
+      # 3️⃣ Build Backend (Node.js) - CORRIGÉ
       - name: Build Backend
         run: |
           cd backend
-          npm ci
+          # Synchroniser package.json et package-lock.json d'abord
+          npm install
+          # Puis build
           npm run build
         env:
           NODE_ENV: production
 
-      # 4️⃣ Build Frontend (React)
-      - name: Build Frontend  
+      # 4️⃣ Build Frontend (React)  
+      - name: Build Frontend
         run: |
           cd frontend
-          npm ci
+          # Synchroniser package.json et package-lock.json d'abord
+          npm install
           npm run build
         env:
           NODE_ENV: production
