@@ -10,39 +10,26 @@ jobs:
     timeout-minutes: 10
     
     steps:
-      # 1. Récupérer le code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: |
-            backend/package-lock.json
-            frontend/package-lock.json
 
-      # 3. Build Backend (Node.js) - AFFICHAGE SÉPARÉ
       - name: Build Backend (Node.js)
         run: |
-          echo " Building Backend..."
           cd backend
           npm install
           npm run build -- --skipLibCheck
-          echo " Backend built successfully"
 
-      # 4. Build Frontend (React) - AFFICHAGE SÉPARÉ  
       - name: Build Frontend (React)
         run: |
-          echo " Building Frontend..."
           cd frontend
           npm install
           npm run build
-          echo " Frontend built successfully"
 
-      # 5. Déploiement sur EC2 - AFFICHAGE SÉPARÉ
       - name: Deploiement sur EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -53,25 +40,25 @@ jobs:
           timeout: 120s
           script: |
             set -e
-            echo " Starting deployment..."
+            echo "🚀 Starting deployment..."
             cd ~
             
             # Backup et cleanup
             if [ -d "gpit" ]; then
-              echo " Backing up environment files..."
+              echo "💾 Backing up environment files..."
               cp gpit/backend/.env /tmp/backend_env.backup 2>/dev/null || true
               cp gpit/frontend/.env /tmp/frontend_env.backup 2>/dev/null || true
-              echo " Removing old deployment..."
+              echo "🗑️ Removing old deployment..."
               sudo rm -rf gpit
             fi
             
             # Clone repo
-            echo " Cloning repository..."
+            echo "📥 Cloning repository..."
             git clone https://github.com/EmnaMansour/gpit.git
             cd gpit
             
             # Create environment files
-            echo " Setting up environment files..."
+            echo "🔧 Setting up environment files..."
             
             # Backend .env
             printf "MONGO_URI=${{ secrets.MONGO_URI }}\nPORT=${{ secrets.PORT }}\nJWT_SECRET=${{ secrets.JWT_SECRET }}\nEMAIL_USER=${{ secrets.EMAIL_USER }}\nEMAIL_PASS=${{ secrets.EMAIL_PASS }}\n" > ./backend/.env
@@ -79,12 +66,28 @@ jobs:
             # Frontend .env
             printf "VITE_API_URL=${{ secrets.VITE_API_URL }}\n" > ./frontend/.env
             
-            # Docker deployment
-            echo " Starting Docker deployment..."
+            # Docker deployment - CORRECTION DU CONFLIT
+            echo "🐳 Starting Docker deployment..."
+            
+            # Arrêter et supprimer TOUS les containers et réseaux
+            echo "🔻 Stopping all containers..."
             docker-compose down || true
+            
+            # Supprimer les containers orphelins
+            echo "🧹 Cleaning orphaned containers..."
+            docker ps -aq | xargs -r docker rm -f || true
+            
+            # Supprimer les réseaux orphelins
+            echo "🔌 Cleaning orphaned networks..."
+            docker network ls --filter name=gpit -q | xargs -r docker network rm || true
+            
+            # Builder et démarrer
+            echo "🏗️ Building Docker images..."
             docker-compose build --no-cache
+            
+            echo "🚀 Starting services..."
             docker-compose up -d
             
-            echo " Deployment completed!"
+            echo "✅ Deployment completed!"
             sleep 5
             docker ps
