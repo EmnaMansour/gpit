@@ -9,7 +9,6 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: emna
       MONGO_INITDB_ROOT_PASSWORD: emna
-      MONGO_INITDB_DATABASE: test
     ports:
       - "27017:27017"
     volumes:
@@ -17,11 +16,9 @@ services:
     networks:
       - app-network
 
-  # Backend Node.js - CORRIGÉ
+  # Backend Node.js
   backend:
-    build: 
-      context: ./backend
-      dockerfile: Dockerfile
+    build: ./backend
     container_name: backend
     restart: unless-stopped
     env_file:
@@ -30,6 +27,10 @@ services:
       - mongo
     ports:
       - "8081:8000"
+    environment:
+      - MONGO_URI=mongodb://emna:emna@mongo:27017/pfe?authSource=admin
+      - NODE_ENV=production
+      - PORT=8000
     networks:
       - app-network
 
