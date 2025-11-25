@@ -1,36 +1,15 @@
 version: "3.9"
 
 services:
-  # Base de données MongoDB
-  mongo:
-    image: mongo:6
-    container_name: mongo
-    restart: unless-stopped
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: emna
-      MONGO_INITDB_ROOT_PASSWORD: emna
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo-data:/data/db
-    networks:
-      - app-network
-
-  # Backend Node.js
+  # Backend Node.js (avec MongoDB Atlas)
   backend:
     build: ./backend
     container_name: backend
     restart: unless-stopped
     env_file:
       - ./backend/.env
-    depends_on:
-      - mongo
     ports:
       - "8081:8000"
-    environment:
-      - MONGO_URI=mongodb://emna:emna@mongo:27017/pfe?authSource=admin
-      - NODE_ENV=production
-      - PORT=8000
     networks:
       - app-network
 
@@ -44,26 +23,9 @@ services:
     ports:
       - "5173:80"
     environment:
-    - VITE_API_URL=http://44.210.225.211:8081
+      - VITE_API_URL=http://44.210.225.211:5173
     networks:
       - app-network
-
-  # Agent Python (collecte métriques CPU/RAM et envoie vers InfluxDB)
-  agent:
-    build: ./backend/agent
-    container_name: agent
-    restart: unless-stopped
-    depends_on:
-      - backend
-      - influxdb
-    network_mode: "host"   # Permet de surveiller l'hôte directement
-    environment:
-      - API_INCIDENT=http://localhost:8081/api/incidents
-      - BACKEND_URL=http://localhost:8081
-      - INFLUX_URL=http://localhost:8086
-      - INFLUX_TOKEN=supersecrettoken
-      - INFLUX_ORG=gpit
-      - INFLUX_BUCKET=metrics
 
   # InfluxDB (base de données métriques)
   influxdb:
@@ -96,45 +58,12 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_AUTH_ANONYMOUS_ENABLED=false
     volumes:
       - grafana_data:/var/lib/grafana
     networks:
       - app-network
 
-  # Cypress pour tests E2E
-  cypress:
-    image: cypress/included:15.3.0
-    container_name: cypress
-    depends_on:
-      - frontend
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
-    environment:
-      - CYPRESS_baseUrl=http://frontend:5173
-    entrypoint: ["sh", "-c"]
-    command: >
-      echo 'Waiting for frontend...';
-      until curl -s http://frontend:5173 > /dev/null; do sleep 2; done;
-      echo 'Frontend ready, starting Cypress in interactive mode';
-      npx cypress open;
-      tail -f /dev/null
-
-  # SonarQube pour qualité du code
-  sonarqube:
-    image: sonarqube:community
-    container_name: sonarqube
-    restart: unless-stopped
-    ports:
-      - "9000:9000"
-    environment:
-      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
-    networks:
-      - app-network
-
 volumes:
-  mongo-data:
   influxdb_data:
   grafana_data:
 
