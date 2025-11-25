@@ -12,8 +12,10 @@ jobs:
     timeout-minutes: 10
     
     steps:
-      - name: Checkout code
+      - name: Checkout code (without submodules)
         uses: actions/checkout@v4
+        with:
+          submodules: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -34,8 +36,10 @@ jobs:
     timeout-minutes: 10
     
     steps:
-      - name: Checkout code
+      - name: Checkout code (without submodules)
         uses: actions/checkout@v4
+        with:
+          submodules: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -85,13 +89,13 @@ jobs:
             git clone https://github.com/EmnaMansour/gpit.git
             cd gpit
             
-            # Create environment files avec printf (alternative aux HERE-documents)
+            # Create environment files
             echo " Setting up environment files..."
             
-            # Backend .env avec printf
+            # Backend .env
             printf "MONGO_URI=${{ secrets.MONGO_URI }}\nPORT=${{ secrets.PORT }}\nJWT_SECRET=${{ secrets.JWT_SECRET }}\nEMAIL_USER=${{ secrets.EMAIL_USER }}\nEMAIL_PASS=${{ secrets.EMAIL_PASS }}\n" > ./backend/.env
             
-            # Frontend .env avec printf
+            # Frontend .env
             printf "VITE_API_URL=${{ secrets.VITE_API_URL }}\n" > ./frontend/.env
             
             echo " Environment files created successfully"
@@ -171,9 +175,4 @@ jobs:
             echo " Your application is now live!"
           else
             echo " Deployment failed. Check the logs above."
-            echo " Common issues:"
-            echo "  - Check if EC2 security group allows SSH (port 22)"
-            echo "  - Verify all GitHub secrets are correctly set"
-            echo "  - Ensure Docker and Docker Compose are installed on EC2"
-            echo "  - Check if there's enough disk space on EC2"
           fi
