@@ -28,7 +28,7 @@ services:
     ports:
       - "8081:8000"
     environment:
-      - MONGO_URI=mongodb+srv://emna:emna@cluster0.yq5crni.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
+      - MONGO_URI=mongodb://emna:emna@mongo:27017/test?authSource=admin
       - NODE_ENV=production
       - PORT=8000
     networks:
