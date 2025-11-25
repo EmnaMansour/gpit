@@ -1,10 +1,10 @@
 version: "3.9"
 
 services:
-  # Base de données MongoDB
+
   mongo:
     image: mongo:6
-    container_name: mongo
+    container_name: gpit-mongo
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: emna
@@ -16,10 +16,9 @@ services:
     networks:
       - app-network
 
-  # Backend Node.js
   backend:
     build: ./backend
-    container_name: backend
+    container_name: gpit-backend
     restart: unless-stopped
     env_file:
       - ./backend/.env
@@ -27,48 +26,42 @@ services:
       - mongo
     ports:
       - "8081:8000"
-    environment:
-      - MONGO_URI=mongodb://emna:emna@mongo:27017/pfe?authSource=admin
-      - NODE_ENV=production
-      - PORT=8000
     networks:
       - app-network
 
-  # Frontend Vite/React
   frontend:
     build: ./frontend
-    container_name: frontend
+    container_name: gpit-frontend
     restart: unless-stopped
     depends_on:
       - backend
     ports:
       - "5173:80"
     environment:
-    - VITE_API_URL=http://44.210.225.211:8081
+      - VITE_API_URL=http://44.210.225.211:8081
     networks:
       - app-network
 
-  # Agent Python (collecte métriques CPU/RAM et envoie vers InfluxDB)
   agent:
     build: ./backend/agent
-    container_name: agent
+    container_name: gpit-agent
     restart: unless-stopped
     depends_on:
       - backend
       - influxdb
-    network_mode: "host"   # Permet de surveiller l'hôte directement
+    networks:
+      - app-network
     environment:
-      - API_INCIDENT=http://localhost:8081/api/incidents
-      - BACKEND_URL=http://localhost:8081
-      - INFLUX_URL=http://localhost:8086
+      - API_INCIDENT=http://gpit-backend:8000/api/incidents
+      - BACKEND_URL=http://gpit-backend:8000
+      - INFLUX_URL=http://influxdb:8086
       - INFLUX_TOKEN=supersecrettoken
       - INFLUX_ORG=gpit
       - INFLUX_BUCKET=metrics
 
-  # InfluxDB (base de données métriques)
   influxdb:
     image: influxdb:2.7
-    container_name: influxdb
+    container_name: gpit-influxdb
     restart: unless-stopped
     ports:
       - "8086:8086"
@@ -84,10 +77,9 @@ services:
     networks:
       - app-network
 
-  # Grafana (visualisation métriques)
   grafana:
     image: grafana/grafana:latest
-    container_name: grafana
+    container_name: gpit-grafana
     restart: unless-stopped
     depends_on:
       - influxdb
@@ -96,35 +88,30 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_AUTH_ANONYMOUS_ENABLED=false
     volumes:
       - grafana_data:/var/lib/grafana
     networks:
       - app-network
 
-  # Cypress pour tests E2E
   cypress:
     image: cypress/included:15.3.0
-    container_name: cypress
+    container_name: gpit-cypress
     depends_on:
       - frontend
     working_dir: /app
     volumes:
       - ./frontend:/app
     environment:
-      - CYPRESS_baseUrl=http://frontend:5173
+      - CYPRESS_baseUrl=http://gpit-frontend:5173
     entrypoint: ["sh", "-c"]
     command: >
-      echo 'Waiting for frontend...';
-      until curl -s http://frontend:5173 > /dev/null; do sleep 2; done;
-      echo 'Frontend ready, starting Cypress in interactive mode';
+      until curl -s http://gpit-frontend:5173 > /dev/null; do sleep 2; done;
       npx cypress open;
       tail -f /dev/null
 
-  # SonarQube pour qualité du code
   sonarqube:
     image: sonarqube:community
-    container_name: sonarqube
+    container_name: gpit-sonarqube
     restart: unless-stopped
     ports:
       - "9000:9000"
