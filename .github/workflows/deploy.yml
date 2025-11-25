@@ -7,43 +7,90 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
+    
     steps:
       # 1️⃣ Récupérer le code
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # 2️⃣ Déploiement via SSH
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v0.1.6
+      # 2️⃣ Setup Node.js pour les builds
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          host: ${{ secrets.EC2_HOST }}       # IP publique EC2
-          username: ubuntu                    # Utilisateur SSH
-          key: ${{ secrets.GPIT_KEY }}        # Clé privée SSH
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      # 3️⃣ Build Backend (Node.js)
+      - name: Build Backend
+        run: |
+          cd backend
+          npm ci
+          npm run build
+        env:
+          NODE_ENV: production
+
+      # 4️⃣ Build Frontend (React)
+      - name: Build Frontend  
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+        env:
+          NODE_ENV: production
+
+      # 5️⃣ Déploiement via SSH
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.GPIT_KEY }}
           port: 22
           script: |
-            # Supprimer l'ancien dossier en sudo (pour éviter les problèmes de permission)
+            echo "🚀 Starting deployment..."
             cd ~
+            
+            # Sauvegarder les anciens .env
+            if [ -d "gpit" ]; then
+              echo "📦 Saving existing environment files..."
+              cp gpit/backend/.env backend_env_backup 2>/dev/null || true
+              cp gpit/frontend/.env frontend_env_backup 2>/dev/null || true
+            fi
+            
+            # Supprimer l'ancien dossier
             sudo rm -rf gpit
-
+            
             # Cloner le repo
+            echo "📥 Cloning repository..."
             git clone https://github.com/EmnaMansour/gpit.git
             cd gpit
-
-            # Créer le dossier backend si nécessaire
-            mkdir -p ./backend
-
-            # Créer le fichier .env pour le backend et frontend avec secrets GitHub
-            echo "MONGO_URI=${{ secrets.MONGO_URI }}" > ./backend/.env
-            echo "PORT=${{ secrets.PORT }}" >> ./backend/.env
-            echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> ./backend/.env
-            echo "EMAIL_USER=${{ secrets.EMAIL_USER }}" >> ./backend/.env
-            echo "EMAIL_PASS=${{ secrets.EMAIL_PASS }}" >> ./backend/.env
-            echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" > ./frontend/.env
-
+            
+            # Restaurer les .env ou créer les nouveaux
+            echo "🔧 Setting up environment files..."
+            if [ -f ../backend_env_backup ]; then
+              cp ../backend_env_backup ./backend/.env
+            else
+              echo "MONGO_URI=${{ secrets.MONGO_URI }}" > ./backend/.env
+              echo "PORT=${{ secrets.PORT }}" >> ./backend/.env
+              echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> ./backend/.env
+              echo "EMAIL_USER=${{ secrets.EMAIL_USER }}" >> ./backend/.env
+              echo "EMAIL_PASS=${{ secrets.EMAIL_PASS }}" >> ./backend/.env
+            fi
+            
+            if [ -f ../frontend_env_backup ]; then
+              cp ../frontend_env_backup ./frontend/.env
+            else
+              echo "VITE_API_URL=${{ secrets.VITE_API_URL }}" > ./frontend/.env
+            fi
+            
             # Déployer avec Docker
+            echo "🐳 Starting Docker deployment..."
             docker-compose down
-            docker-compose build
+            docker-compose build --no-cache
             docker-compose up -d
-          
-          timeout: 10m
-          debug: true
+            
+            echo "✅ Deployment completed successfully!"
+            docker ps
