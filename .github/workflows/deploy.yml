@@ -3,11 +3,12 @@ name: Deploy to EC2
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     
     steps:
       - name: Checkout code
@@ -25,14 +26,27 @@ jobs:
       - name: Build Backend
         run: |
           cd backend
-          npm install
+          npm ci
           npm run build -- --skipLibCheck
 
       - name: Build Frontend
         run: |
           cd frontend
-          npm install
+          npm ci
           npm run build
+
+      - name: Test SSH Connection
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.GPIT_KEY }}
+          port: 22
+          timeout: 30s
+          script: |
+            echo "SSH connection successful!"
+            echo "Host: $(hostname)"
+            echo "User: $(whoami)"
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
@@ -41,52 +55,102 @@ jobs:
           username: ubuntu
           key: ${{ secrets.GPIT_KEY }}
           port: 22
-          timeout: 120s
+          timeout: 300s  # Increased to 5 minutes
+          command_timeout: 15m
           script: |
             set -e
-            echo " Starting deployment..."
+            echo "🚀 Starting deployment at $(date)"
             cd ~
             
-            # Backup et cleanup
+            # Backup existing deployment
             if [ -d "gpit" ]; then
-              echo " Backing up environment files..."
-              cp gpit/backend/.env /tmp/backend_env.backup 2>/dev/null || true
-              cp gpit/frontend/.env /tmp/frontend_env.backup 2>/dev/null || true
-              echo " Removing old deployment..."
+              echo "📦 Backing up environment files..."
+              mkdir -p /tmp/gpit-backup
+              cp gpit/backend/.env /tmp/gpit-backup/backend.env 2>/dev/null || true
+              cp gpit/frontend/.env /tmp/gpit-backup/frontend.env 2>/dev/null || true
+              
+              echo "🗑️  Removing old deployment..."
               sudo rm -rf gpit
             fi
             
-            # Clone repo
-            echo " Cloning repository..."
+            # Clone repository
+            echo "📥 Cloning repository..."
             git clone https://github.com/EmnaMansour/gpit.git
             cd gpit
             
-            # Create environment files avec printf (alternative aux HERE-documents)
-            echo " Setting up environment files..."
+            # Restore or create environment files
+            echo "⚙️  Setting up environment files..."
             
             # Backend .env
-            printf "MONGO_URI=${{ secrets.MONGO_URI }}\nPORT=${{ secrets.PORT }}\nJWT_SECRET=${{ secrets.JWT_SECRET }}\nEMAIL_USER=${{ secrets.EMAIL_USER }}\nEMAIL_PASS=${{ secrets.EMAIL_PASS }}\n" > ./backend/.env
+            if [ -f "/tmp/gpit-backup/backend.env" ]; then
+              echo "Restoring backend .env from backup..."
+              cp /tmp/gpit-backup/backend.env ./backend/.env
+            else
+              echo "Creating new backend .env..."
+              cat > ./backend/.env << 'EOL'
+            MONGO_URI=${{ secrets.MONGO_URI }}
+            PORT=${{ secrets.PORT }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            EMAIL_USER=${{ secrets.EMAIL_USER }}
+            EMAIL_PASS=${{ secrets.EMAIL_PASS }}
+            EOL
+            fi
             
             # Frontend .env
-            printf "VITE_API_URL=${{ secrets.VITE_API_URL }}\n" > ./frontend/.env
+            if [ -f "/tmp/gpit-backup/frontend.env" ]; then
+              echo "Restoring frontend .env from backup..."
+              cp /tmp/gpit-backup/frontend.env ./frontend/.env
+            else
+              echo "Creating new frontend .env..."
+              cat > ./frontend/.env << 'EOL'
+            VITE_API_URL=${{ secrets.VITE_API_URL }}
+            EOL
+            fi
             
             # Docker deployment
-            echo "Starting Docker deployment..."
-            echo " Stopping existing containers..."
-            docker-compose down || true
-            echo " Cleaning Docker resources..."
-            docker system prune -f || true
-            echo " Building Docker images..."
-            docker-compose build --no-cache
-            echo " Starting services..."
+            echo "🐳 Starting Docker deployment..."
+            
+            echo "⏹️  Stopping existing containers..."
+            docker-compose down 2>/dev/null || true
+            
+            echo "🧹 Cleaning Docker resources..."
+            docker system prune -af --volumes || true
+            
+            echo "🔨 Building Docker images..."
+            docker-compose build --no-cache --progress=plain
+            
+            echo "▶️  Starting services..."
             docker-compose up -d
-            echo " Waiting for services to be healthy..."
-            sleep 10
-            echo " Deployment completed!"
-            echo " Checking running containers:"
-            docker ps
-            echo " Checking container status:"
+            
+            echo "⏳ Waiting for services to be healthy..."
+            sleep 15
+            
+            # Health checks
+            echo "🔍 Checking deployment status..."
+            echo ""
+            echo "📊 Running containers:"
+            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+            echo ""
+            echo "📈 Container status:"
             docker-compose ps
-            echo " Checking recent logs:"
-            docker-compose logs --tail=20
-            echo " Application deployed successfully!"
+            echo ""
+            echo "📝 Recent logs:"
+            docker-compose logs --tail=30
+            echo ""
+            
+            # Verify services are running
+            if [ $(docker-compose ps -q | wc -l) -eq 0 ]; then
+              echo "❌ Error: No containers are running!"
+              exit 1
+            fi
+            
+            echo "✅ Deployment completed successfully at $(date)"
+
+      - name: Deployment Status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Deployment succeeded!"
+          else
+            echo "❌ Deployment failed. Check the logs above."
+          fi
