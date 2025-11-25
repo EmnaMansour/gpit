@@ -26,13 +26,13 @@ jobs:
       - name: Build Backend
         run: |
           cd backend
-          npm ci
+          npm install
           npm run build -- --skipLibCheck
 
       - name: Build Frontend
         run: |
           cd frontend
-          npm ci
+          npm install
           npm run build
 
       - name: Test SSH Connection
@@ -59,27 +59,27 @@ jobs:
           command_timeout: 15m
           script: |
             set -e
-            echo "🚀 Starting deployment at $(date)"
+            echo "Starting deployment at $(date)"
             cd ~
             
             # Backup existing deployment
             if [ -d "gpit" ]; then
-              echo "📦 Backing up environment files..."
+              echo "Backing up environment files..."
               mkdir -p /tmp/gpit-backup
               cp gpit/backend/.env /tmp/gpit-backup/backend.env 2>/dev/null || true
               cp gpit/frontend/.env /tmp/gpit-backup/frontend.env 2>/dev/null || true
               
-              echo "🗑️  Removing old deployment..."
+              echo " Removing old deployment..."
               sudo rm -rf gpit
             fi
             
             # Clone repository
-            echo "📥 Cloning repository..."
+            echo " Cloning repository..."
             git clone https://github.com/EmnaMansour/gpit.git
             cd gpit
             
             # Restore or create environment files
-            echo "⚙️  Setting up environment files..."
+            echo "  Setting up environment files..."
             
             # Backend .env
             if [ -f "/tmp/gpit-backup/backend.env" ]; then
@@ -108,49 +108,49 @@ jobs:
             fi
             
             # Docker deployment
-            echo "🐳 Starting Docker deployment..."
+            echo " Starting Docker deployment..."
             
-            echo "⏹️  Stopping existing containers..."
+            echo "  Stopping existing containers..."
             docker-compose down 2>/dev/null || true
             
-            echo "🧹 Cleaning Docker resources..."
+            echo " Cleaning Docker resources..."
             docker system prune -af --volumes || true
             
-            echo "🔨 Building Docker images..."
+            echo " Building Docker images..."
             docker-compose build --no-cache --progress=plain
             
-            echo "▶️  Starting services..."
+            echo "  Starting services..."
             docker-compose up -d
             
-            echo "⏳ Waiting for services to be healthy..."
+            echo " Waiting for services to be healthy..."
             sleep 15
             
             # Health checks
-            echo "🔍 Checking deployment status..."
+            echo " Checking deployment status..."
             echo ""
-            echo "📊 Running containers:"
+            echo " Running containers:"
             docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
             echo ""
-            echo "📈 Container status:"
+            echo " Container status:"
             docker-compose ps
             echo ""
-            echo "📝 Recent logs:"
+            echo " Recent logs:"
             docker-compose logs --tail=30
             echo ""
             
             # Verify services are running
             if [ $(docker-compose ps -q | wc -l) -eq 0 ]; then
-              echo "❌ Error: No containers are running!"
+              echo " Error: No containers are running!"
               exit 1
             fi
             
-            echo "✅ Deployment completed successfully at $(date)"
+            echo " Deployment completed successfully at $(date)"
 
       - name: Deployment Status
         if: always()
         run: |
           if [ "${{ job.status }}" == "success" ]; then
-            echo "✅ Deployment succeeded!"
+            echo " Deployment succeeded!"
           else
-            echo "❌ Deployment failed. Check the logs above."
+            echo " Deployment failed. Check the logs above."
           fi
