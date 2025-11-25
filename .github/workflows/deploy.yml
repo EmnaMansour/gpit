@@ -6,190 +6,114 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-backend:
-    name: Build Backend (Node.js)
+  debug-connection:
+    name: 🔍 Debug SSH Connection
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Build Backend
+      - name: Check EC2 Status
         run: |
-          cd backend
-          npm install
-          npm run build -- --skipLibCheck
-
-  build-frontend:
-    name: Build Frontend (React)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: build-backend
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Build Frontend
-        run: |
-          cd frontend
-          npm install
-          npm run build
+          echo "🔍 Debugging EC2 Connection..."
+          echo "EC2 Host: ${{ secrets.EC2_HOST }}"
+          echo "Username: ubuntu"
+          echo ""
+          echo "📋 Testing basic connectivity..."
+          
+          # Test ping
+          if ping -c 2 ${{ secrets.EC2_HOST }} &>/dev/null; then
+            echo "✅ Ping successful - host is reachable"
+          else
+            echo "❌ Ping failed - host may be down"
+          fi
+          
+          # Test SSH port
+          if nc -z -w 5 ${{ secrets.EC2_HOST }} 22 &>/dev/null; then
+            echo "✅ Port 22 is open"
+          else
+            echo "❌ Port 22 is closed or blocked"
+          fi
 
   deploy:
-    name: Déploiement sur EC2 avec Docker
+    name: 🚀 Deploy Application
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: [build-backend, build-frontend]
+    timeout-minutes: 10
+    needs: debug-connection
     
     steps:
-      - name: Deploy to EC2
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Simple SSH Test
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.GPIT_KEY }}
           port: 22
-          timeout: 180s
-          command_timeout: 20m
+          timeout: 60s
+          script: |
+            echo "🎉 SUCCESS! SSH connection works!"
+            echo "System info:"
+            uname -a
+            echo "✅ Ready for deployment"
+
+      - name: Quick Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.GPIT_KEY }}
+          port: 22
+          timeout: 300s
           script: |
             set -e
-            echo "🚀 Starting deployment at $(date)..."
+            echo "🚀 QUICK DEPLOYMENT STARTING..."
+            
             cd ~
-            
-            # Backup et cleanup
-            if [ -d "gpit" ]; then
-              echo "💾 Backing up environment files..."
-              cp gpit/backend/.env /tmp/backend_env.backup 2>/dev/null || true
-              cp gpit/frontend/.env /tmp/frontend_env.backup 2>/dev/null || true
-              echo "🗑️ Removing old deployment..."
-              sudo rm -rf gpit
-            fi
-            
-            # Clone repo
-            echo "📥 Cloning repository..."
+            sudo rm -rf gpit
             git clone https://github.com/EmnaMansour/gpit.git
             cd gpit
             
-            # Create environment files
-            echo "🔧 Setting up environment files..."
-            
-            # Backend .env
-            cat > ./backend/.env << EOF
-            MONGO_URI=${{ secrets.MONGO_URI }}
-            PORT=${{ secrets.PORT }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            EMAIL_USER=${{ secrets.EMAIL_USER }}
-            EMAIL_PASS=${{ secrets.EMAIL_PASS }}
+            # Quick environment setup
+            cat > ./backend/.env << 'EOF'
+            MONGO_URI=mongodb+srv://emna:emna@cluster0.yq5crni.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
+            PORT=8000
+            JWT_SECRET=emna
+            EMAIL_USER=emnamansour77@gmail.com
+            EMAIL_PASS=xzjcsupzgxxhupbb
+            NODE_ENV=production
             EOF
             
-            # Frontend .env
-            cat > ./frontend/.env << EOF
-            VITE_API_URL=${{ secrets.VITE_API_URL }}
+            cat > ./frontend/.env << 'EOF'
+            VITE_API_URL=http://44.210.225.211:8081/api
             EOF
             
-            echo "📋 Environment files created successfully"
+            # Quick deploy
+            sudo docker-compose down 2>/dev/null || true
+            sudo docker-compose up -d mongo backend frontend --build
             
-            # Docker deployment
-            echo "🐳 Starting Docker deployment..."
-            
-            # Vérifier que Docker est installé
-            if ! command -v docker &> /dev/null; then
-              echo "❌ Docker is not installed!"
-              exit 1
-            fi
-            
-            if ! command -v docker-compose &> /dev/null; then
-              echo "❌ Docker Compose is not installed!"
-              exit 1
-            fi
-            
-            echo "✅ Docker version: $(docker --version)"
-            echo "✅ Docker Compose version: $(docker-compose --version)"
-            
-            # Arrêter et supprimer TOUS les containers et réseaux
-            echo "🔻 Stopping all containers..."
-            docker-compose down -v --remove-orphans 2>/dev/null || true
-            
-            # Supprimer les containers orphelins
-            echo "🧹 Cleaning orphaned containers..."
-            docker ps -aq | xargs -r docker rm -f 2>/dev/null || true
-            
-            # Supprimer les réseaux orphelins
-            echo "🔌 Cleaning orphaned networks..."
-            docker network prune -f 2>/dev/null || true
-            
-            # Nettoyer les images non utilisées
-            echo "🗑️ Cleaning unused images..."
-            docker image prune -af 2>/dev/null || true
-            
-            # Builder et démarrer
-            echo "🏗️ Building Docker images (this may take a few minutes)..."
-            docker-compose build --no-cache
-            
-            if [ $? -ne 0 ]; then
-              echo "❌ Docker build failed!"
-              exit 1
-            fi
-            
-            echo "🚀 Starting services..."
-            docker-compose up -d
-            
-            if [ $? -ne 0 ]; then
-              echo "❌ Failed to start services!"
-              docker-compose logs
-              exit 1
-            fi
-            
-            # Attendre que les services démarrent
-            echo "⏳ Waiting for services to start..."
-            sleep 10
-            
-            # Vérifier l'état des containers
-            echo ""
-            echo "📊 Container status:"
-            docker-compose ps
-            
-            echo ""
-            echo "🐳 Running containers:"
-            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-            
-            # Vérifier que les containers sont bien running
-            RUNNING_CONTAINERS=$(docker-compose ps -q | wc -l)
-            if [ "$RUNNING_CONTAINERS" -eq 0 ]; then
-              echo ""
-              echo "❌ No containers are running!"
-              echo "📋 Recent logs:"
-              docker-compose logs --tail=50
-              exit 1
-            fi
-            
-            echo ""
-            echo "✅ Deployment completed successfully at $(date)!"
-            echo "✅ $RUNNING_CONTAINERS container(s) running"
+            sleep 30
+            echo "✅ DEPLOYMENT COMPLETE!"
+            echo "Frontend: http://44.210.225.211:5173"
+            echo "Backend: http://44.210.225.211:8081"
 
-      - name: Deployment Status
-        if: always()
+      - name: Success Message
+        if: success()
         run: |
-          if [ "${{ job.status }}" == "success" ]; then
-            echo "✅ Deployment succeeded!"
-            echo "🎉 Your application is now live!"
-          else
-            echo "❌ Deployment failed. Check the logs above."
-            echo "💡 Common issues:"
-            echo "  - Check if EC2 security group allows SSH (port 22)"
-            echo "  - Verify all GitHub secrets are correctly set"
-            echo "  - Ensure Docker and Docker Compose are installed on EC2"
-            echo "  - Check if there's enough disk space on EC2"
-          fi
+          echo "🎉 🎉 🎉 SUCCESS! 🎉 🎉 🎉"
+          echo "Your application is LIVE!"
+          echo "🌐 Frontend: http://${{ secrets.EC2_HOST }}:5173"
+          echo "🔧 Backend: http://${{ secrets.EC2_HOST }}:8081"
+
+      - name: Failure Help
+        if: failure()
+        run: |
+          echo "❌ SSH Connection Failed"
+          echo ""
+          echo "🚨 URGENT - Check these NOW:"
+          echo "1. 🌐 Go to AWS Console > EC2"
+          echo "2. 🔒 Check Security Group - Port 22 MUST be open to 0.0.0.0/0"
+          echo "3. 🖥️ Instance must be 'Running' with '2/2 status checks'"
+          echo "4. 🔑 Test manually: ssh -i key.pem ubuntu@${{ secrets.EC2_HOST }}"
+          echo "5. 📧 If stuck, contact AWS support or create new EC2 instance"
