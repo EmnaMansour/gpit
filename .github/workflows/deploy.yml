@@ -17,32 +17,30 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'  # Version compatible avec Cypress
+          node-version: '20'
           cache: 'npm'
           cache-dependency-path: |
             backend/package-lock.json
             frontend/package-lock.json
 
-      # 3️⃣ Build Backend (Node.js) - CORRIGÉ
+      # 3️⃣ Build Backend (Node.js) - AVEC devDependencies
       - name: Build Backend
         run: |
           cd backend
-          # Synchroniser package.json et package-lock.json d'abord
-          npm install
-          # Puis build
+          echo "📦 Installing dependencies (including dev dependencies for build)..."
+          npm ci
+          echo "🏗️ Building TypeScript application..."
           npm run build
-        env:
-          NODE_ENV: production
+          echo "🧹 Cleaning up dev dependencies for production..."
+          npm ci --omit=dev
 
       # 4️⃣ Build Frontend (React)  
       - name: Build Frontend
         run: |
           cd frontend
-          # Synchroniser package.json et package-lock.json d'abord
-          npm install
+          npm ci
           npm run build
-        env:
-          NODE_ENV: production
+          npm ci --omit=dev
 
       # 5️⃣ Déploiement via SSH
       - name: Deploy to EC2 via SSH
