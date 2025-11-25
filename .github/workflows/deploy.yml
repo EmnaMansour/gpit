@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Setup Node.js version compatible
+      # 2️⃣ Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -23,24 +23,24 @@ jobs:
             backend/package-lock.json
             frontend/package-lock.json
 
-      # 3️⃣ Build Backend (Node.js) - AVEC devDependencies
+      # 3️⃣ Build Backend (Node.js) - AVEC npm install
       - name: Build Backend
         run: |
           cd backend
-          echo "📦 Installing dependencies (including dev dependencies for build)..."
-          npm ci
+          echo "📦 Installing dependencies..."
+          npm install
           echo "🏗️ Building TypeScript application..."
           npm run build
-          echo "🧹 Cleaning up dev dependencies for production..."
-          npm ci --omit=dev
+          echo "🧹 Cleaning up node_modules..."
+          rm -rf node_modules
 
       # 4️⃣ Build Frontend (React)  
       - name: Build Frontend
         run: |
           cd frontend
-          npm ci
+          npm install
           npm run build
-          npm ci --omit=dev
+          rm -rf node_modules
 
       # 5️⃣ Déploiement via SSH
       - name: Deploy to EC2 via SSH
