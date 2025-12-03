@@ -34,8 +34,6 @@ RUN npm install --omit=dev
 # Copier le build depuis l'étape builder
 COPY --from=builder /app/dist ./dist
 
-# Copier le fichier .env dans le conteneur (optionnel, peut aussi être monté via -v)
-COPY .env ./
 
 # Exposer le port de l'application
 EXPOSE 8000
