@@ -56,7 +56,7 @@ app.set('sendIncidentNotification', sendIncidentNotification);
 
 // --- CORS ---
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174'],
+  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174' , 'http://44.210.225.211/'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true

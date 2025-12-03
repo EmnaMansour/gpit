@@ -1,8 +1,8 @@
 node_modules/
-gpit
+
 
 *.env
 *.env.local
-
 *.pem
-gpit/
+
+
