@@ -51,8 +51,12 @@ try {
 
 if (io) app.set('io', io);
 
-app.set('sendVerificationEmail', sendVerificationEmail);
-app.set('sendIncidentNotification', sendIncidentNotification);
+// app.set('sendVerificationEmail', sendVerificationEmail);
+// app.set('sendIncidentNotification', sendIncidentNotification);
+
+
+app.set('sendVerificationEmail', async () => {});
+app.set('sendIncidentNotification', async () => {});
 
 // --- CORS ---
 app.use(cors({
@@ -87,6 +91,9 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/users', require('./routes/quickActions')); // Ajoutez cette ligne
 app.use('/scan', qrScanRoutes);  // Route PUBLIQUE pour scanner les QR codes
 
+app.get('/ping', (req, res) => {
+  res.send('pong');
+});
 // --- Fichiers statiques ---
 app.use('/qrCodes', express.static(path.join(__dirname, 'qrCodes')));
 

@@ -65,16 +65,16 @@ export function Login({ onLogin }: LoginProps) {
     try {
       console.log('[LOGIN] Tentative de connexion pour:', email);
 
-      const response = await fetch('http://localhost:8000/api/users/login', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          email: email.trim().toLowerCase(), 
-          password 
-        }),
-      });
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/login`, {
+  method: 'POST',
+  headers: { 
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({ 
+    email: email.trim().toLowerCase(), 
+    password 
+  }),
+});
 
       const responseData = await response.json();
       console.log('[LOGIN] Réponse complète:', responseData);
