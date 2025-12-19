@@ -61,7 +61,7 @@ describe('Dashboard Tests', () => {
 
   it('Admin Dashboard', () => {
     login('admin@gmail.com', 'admin');
-    checkDashboardElements('Admin');
+    checkDashboardElements('Admin123');
   });
 
   it('Technicien Dashboard', () => {
