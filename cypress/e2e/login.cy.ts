@@ -62,8 +62,13 @@ describe('Dashboard Tests', () => {
   });
 
   it('Admin Dashboard', () => {
+<<<<<<< HEAD
     login('admin@gmail.com', 'admin123');
     checkDashboardElements('Admin');
+=======
+    login('admin@gmail.com', 'admin');
+    checkDashboardElements('Admin123');
+>>>>>>> 5221650f059fe57bf0a1e409f62b0fc6ea369506
   });
 
   it('Technicien Dashboard', () => {
