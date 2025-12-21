@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Users, Award, BarChart2, Globe, Target, Heart, Lightbulb, Shield, Handshake, Star,Play } from 'lucide-react'
-
+import { Link } from 'react-router-dom'
 export function About() {
   const [visibleSections, setVisibleSections] = useState(new Set())
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
@@ -454,12 +454,14 @@ export function About() {
                 <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
               </span>
             </button> */}
+            <Link to="/contact">
             <button className="group px-10 py-5 bg-transparent border-2 border-white/30 text-white font-bold rounded-full hover:bg-white/10 hover:border-white/50 transition-all duration-300 backdrop-blur-sm text-lg">
               <span className="flex items-center justify-center gap-2">
                 <Play className="w-6 h-6 group-hover:scale-110 transition-transform" />
                 Nous contacter
               </span>
             </button>
+            </Link>
           </div>
         </div>
       </div>

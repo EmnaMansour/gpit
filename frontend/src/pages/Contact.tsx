@@ -11,7 +11,7 @@ const sendContactMessage = async (formData: {
   
   try {
     // Configuration de l'URL API
-const API_BASE = 'http://13.218.77.59/api';
+const API_BASE = 'http://localhost:8000/api';
 const url = `${API_BASE}/contacts`;
 
     

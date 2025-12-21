@@ -19,7 +19,9 @@ import {
 } from 'lucide-react';
 import IncidentModal from '../../components/modals/IncidentModal';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = 'http://localhost:8000';
+
+
 
 interface User {
   _id: string;
@@ -122,25 +124,89 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole, currentUser, auth
   const isEmploye = normalizedRole === 'employé' || normalizedRole === 'employee' || normalizedRole === 'employe';
 
   // Créer l'instance axios
-  const createAxiosInstance = useCallback(() => {
-    const instance = axios.create({
-      baseURL: API_BASE_URL,
-      timeout: 10000,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (authToken && typeof authToken === 'string' && authToken.trim()) {
-      const token = authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`;
-      instance.defaults.headers.common['Authorization'] = token;
-    } else {
-      delete instance.defaults.headers.common['Authorization'];
+const createAxiosInstance = useCallback(() => {
+  const instance = axios.create({
+    baseURL: API_BASE_URL,
+    timeout: 10000,
+    headers: {
+      'Content-Type': 'application/json'
     }
+  });
 
-    return instance;
-  }, [authToken]);
+  console.log('[INCIDENTLIST] authToken:', authToken ? 'PRÉSENT' : 'ABSENT');
+  console.log('[INCIDENTLIST] authToken longueur:', authToken?.length);
+  console.log('[INCIDENTLIST] authToken début:', authToken?.substring(0, 20));
+  
+  if (authToken && typeof authToken === 'string' && authToken.trim()) {
+    const token = authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`;
+    instance.defaults.headers.common['Authorization'] = token;
+    console.log('[INCIDENTLIST] ✓ Header Authorization défini:', token.substring(0, 30) + '...');
+  } else {
+    console.log('[INCIDENTLIST] ✗ Aucun token disponible');
+    delete instance.defaults.headers.common['Authorization'];
+  }
 
+  // ========== INTERCEPTEURS POUR DÉBOGUER ==========
+  
+  // Intercepteur de requête
+  instance.interceptors.request.use(
+    (config) => {
+      console.log('[INCIDENTLIST] → Requête:', {
+        url: config.url,
+        method: config.method?.toUpperCase(),
+        baseURL: config.baseURL,
+        headers: {
+          ...config.headers,
+          // Masquer le token complet pour la sécurité
+          Authorization: config.headers.Authorization 
+            ? `${config.headers.Authorization.substring(0, 30)}...` 
+            : 'Non défini'
+        }
+      });
+      return config;
+    },
+    (error) => {
+      console.error('[INCIDENTLIST] ✗ Erreur requête:', error);
+      return Promise.reject(error);
+    }
+  );
+
+  // Intercepteur de réponse
+  instance.interceptors.response.use(
+    (response) => {
+      console.log('[INCIDENTLIST] ← Réponse:', {
+        url: response.config.url,
+        status: response.status,
+        statusText: response.statusText,
+        dataLength: Array.isArray(response.data) 
+          ? `${response.data.length} éléments` 
+          : typeof response.data === 'object'
+            ? 'Object JSON'
+            : 'Autre'
+      });
+      return response;
+    },
+    (error) => {
+      console.error('[INCIDENTLIST] ✗ Erreur réponse:', {
+        url: error.config?.url,
+        method: error.config?.method?.toUpperCase(),
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        headers: error.response?.headers,
+        configHeaders: {
+          ...error.config?.headers,
+          Authorization: error.config?.headers?.Authorization
+            ? `${error.config.headers.Authorization.substring(0, 30)}...`
+            : 'Non défini'
+        }
+      });
+      return Promise.reject(error);
+    }
+  );
+
+  return instance;
+}, [authToken]);
   // FONCTION POUR EXTRAIRE L'ID DE reportedBy
   const getReportedById = (reportedBy: string | User | null): string | null => {
     if (!reportedBy) return null;
@@ -690,112 +756,191 @@ const IncidentList: React.FC<IncidentListProps> = ({ userRole, currentUser, auth
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
                     Priorité
                   </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+  {isEmploye ? 'DÉCLARÉ PAR' : 'TRAITÉ PAR'}
+</th>
                   <th className="px-6 py-4 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-700/50">
-                {filteredIncidents.map((incident) => (
-                  <tr
-                    key={incident._id}
-                    className={`hover:bg-gray-800/30 transition-colors duration-200 ${
-                      incident.status === 'Résolu' ? 'opacity-70' : ''
-                    }`}
-                  >
-                    <td className="px-6 py-4">
-                      <div>
-                        <div className="text-sm font-semibold text-white mb-1 flex items-center">
-                          <AlertCircle className="h-4 w-4 text-blue-400 mr-2" />
-                          {incident.title}
-                        </div>
-                        <div
-                          className="text-sm text-gray-300 max-w-xs truncate"
-                          title={incident.description}
-                        >
-                          {incident.description}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center text-sm text-gray-300">
-                        <PackageIcon className="h-4 w-4 text-gray-400 mr-2" />
-                        {getEquipmentName(incident.equipment)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-300">
-                      <div className="flex items-center">
-                        <CalendarIcon className="h-4 w-4 text-gray-400 mr-2" />
-                        {formatDate(incident.createdAt)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                          incident.status === 'Nouveau'
-                            ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
-                            : incident.status === 'En cours'
-                            ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                            : 'bg-green-500/20 text-green-400 border border-green-500/30'
-                        }`}
-                      >
-                        {getStatusIcon(incident.status)}
-                        <span className="ml-1">{incident.status}</span>
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                          incident.priority === 'Élevée'
-                            ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                            : incident.priority === 'Moyenne'
-                            ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                            : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
-                        }`}
-                      >
-                        {getPriorityIcon(incident.priority)}
-                        <span className="ml-1">{incident.priority}</span>
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        {/* Bouton Modifier */}
-                        {canEditIncident(incident) && incident.status !== 'Résolu' && (
-                          <button
-                            onClick={() => handleEdit(incident)}
-                            className="p-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 rounded-lg text-blue-400 hover:text-blue-300 transition-all duration-200"
-                            title="Modifier"
-                          >
-                            <PencilIcon className="w-4 h-4" />
-                          </button>
-                        )}
-                        
-                        {/* Bouton Résoudre et Supprimer */}
-                        {canResolveIncident(incident) && incident.status !== 'Résolu' && (
-                          <button
-                            onClick={() => handleResolveAndDelete(incident)}
-                            className="p-2 bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 rounded-lg text-green-400 hover:text-green-300 transition-all duration-200"
-                            title="Marquer comme résolu (suppression directe)"
-                          >
-                            <CheckCircleIcon className="w-4 h-4" />
-                          </button>
-                        )}
+              
+            <tbody className="divide-y divide-gray-700/50">
+  {filteredIncidents.map((incident) => (
+    <tr
+      key={incident._id}
+      className={`hover:bg-gray-800/30 transition-colors duration-200 ${
+        incident.status === 'Résolu' ? 'opacity-70' : ''
+      }`}
+    >
+      {/* Incident */}
+      <td className="px-6 py-4">
+        <div>
+          <div className="text-sm font-semibold text-white mb-1 flex items-center">
+            <AlertCircle className="h-4 w-4 text-blue-400 mr-2" />
+            {incident.title}
+          </div>
+          <div
+            className="text-sm text-gray-300 max-w-xs truncate"
+            title={incident.description}
+          >
+            {incident.description || 'Aucune description'}
+          </div>
+        </div>
+      </td>
 
-                        {/* Bouton Supprimer - ADMIN SEULEMENT */}
-                        {canDeleteIncident(incident) && isAdmin && (
-                          <button
-                            onClick={() => handleDelete(incident)}
-                            className="p-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-lg text-red-400 hover:text-red-300 transition-all duration-200"
-                            title="Supprimer (avec confirmation)"
-                          >
-                            <TrashIcon className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+      {/* Équipement */}
+      <td className="px-6 py-4">
+        <div className="flex items-center text-sm text-gray-300">
+          <PackageIcon className="h-4 w-4 text-gray-400 mr-2" />
+          {getEquipmentName(incident.equipment)}
+        </div>
+      </td>
+
+      {/* Date */}
+      <td className="px-6 py-4 text-sm text-gray-300">
+        <div className="flex items-center">
+          <CalendarIcon className="h-4 w-4 text-gray-400 mr-2" />
+          {formatDate(incident.createdAt)}
+        </div>
+      </td>
+
+      {/* Statut */}
+      <td className="px-6 py-4">
+        <span
+          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+            incident.status === 'Nouveau'
+              ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+              : incident.status === 'En cours'
+              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+              : 'bg-green-500/20 text-green-400 border border-green-500/30'
+          }`}
+        >
+          {getStatusIcon(incident.status)}
+          <span className="ml-1">{incident.status}</span>
+        </span>
+      </td>
+
+      {/* Priorité */}
+      <td className="px-6 py-4">
+        <span
+          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+            incident.priority === 'Élevée'
+              ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+              : incident.priority === 'Moyenne'
+              ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+              : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+          }`}
+        >
+          {getPriorityIcon(incident.priority)}
+          <span className="ml-1">{incident.priority}</span>
+        </span>
+      </td>
+
+      {/* 🔥 COLONNE TRAITÉ PAR : Déclaré par OU Résolu par */}
+      <td className="px-6 py-4">
+        <div className="flex items-center text-sm text-gray-300">
+          <UserIcon className="h-4 w-4 text-cyan-400 mr-2" />
+
+          {incident.status === 'Résolu' && incident.resolvedBy ? (
+            <>
+              <span className="font-medium">
+                {getUserName(incident.resolvedBy)}
+              </span>
+              <span className="ml-2 text-xs font-medium text-green-400">
+                (Résolu par)
+              </span>
+
+              {/* Affichage du rôle du résolveur */}
+              {(() => {
+                const resolver =
+                  typeof incident.resolvedBy === 'object' && incident.resolvedBy !== null
+                    ? incident.resolvedBy
+                    : userList.find((u) => u._id === incident.resolvedBy);
+
+                if (!resolver?.role) return null;
+
+                const role = resolver.role.toLowerCase().trim();
+                if (role.includes('admin'))
+                  return <span className="ml-2 text-xs text-purple-400">(Admin)</span>;
+                if (role.includes('tech'))
+                  return <span className="ml-2 text-xs text-blue-400">(Technicien)</span>;
+                return null;
+              })()}
+            </>
+          ) : (
+            <>
+              <span className="font-medium">
+                {getUserName(incident.reportedBy)}
+              </span>
+              <span className="ml-2 text-xs font-medium text-yellow-400">
+                (Déclaré par)
+              </span>
+
+              {/* Affichage du rôle du déclarant */}
+              {(() => {
+                const reporter =
+                  typeof incident.reportedBy === 'object' && incident.reportedBy !== null
+                    ? incident.reportedBy
+                    : userList.find((u) => u._id === getReportedById(incident.reportedBy));
+
+                if (!reporter?.role) return null;
+
+                const role = reporter.role.toLowerCase().trim();
+                if (role.includes('admin'))
+                  return <span className="ml-2 text-xs text-purple-400">(Admin)</span>;
+                if (role.includes('tech'))
+                  return <span className="ml-2 text-xs text-blue-400">(Technicien)</span>;
+                if (role.includes('employ'))
+                  return <span className="ml-2 text-xs text-green-400">(Employé)</span>;
+                return null;
+              })()}
+            </>
+          )}
+        </div>
+      </td>
+
+      {/* Actions */}
+      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+        <div className="flex justify-end space-x-2">
+          {/* Modifier */}
+          {canEditIncident(incident) && incident.status !== 'Résolu' && (
+            <button
+              onClick={() => handleEdit(incident)}
+              className="p-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 rounded-lg text-blue-400 hover:text-blue-300 transition-all duration-200"
+              title="Modifier"
+            >
+              <PencilIcon className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Résoudre */}
+          {canResolveIncident(incident) && incident.status !== 'Résolu' && (
+            <button
+              onClick={() => handleResolveAndDelete(incident)}
+              className="p-2 bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 rounded-lg text-green-400 hover:text-green-300 transition-all duration-200"
+              title="Marquer comme résolu"
+            >
+              <CheckCircleIcon className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Supprimer (Admin uniquement) */}
+          {canDeleteIncident(incident) && isAdmin && (
+            <button
+              onClick={() => handleDelete(incident)}
+              className="p-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-lg text-red-400 hover:text-red-300 transition-all duration-200"
+              title="Supprimer"
+            >
+              <TrashIcon className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  ))}
+</tbody>
+
             </table>
           </div>
 

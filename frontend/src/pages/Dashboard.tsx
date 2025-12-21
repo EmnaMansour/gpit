@@ -173,7 +173,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole = 'Employé', currentUse
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const API_BASE_URL = '${import.meta.env.VITE_API_URL}';
+  const API_BASE_URL = 'http://localhost:8000';
 
   const getCleanToken = useCallback((): string => {
     if (!authToken) {
@@ -677,14 +677,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole = 'Employé', currentUse
         gradient="from-blue-500 to-cyan-400"
         loading={loading}
       />
-      <StatCard 
+      {/* <StatCard 
         icon={<Package className="h-6 w-6" />} 
         title="Équipements Disponibles" 
         value={stats.availableEquipment} 
         color="bg-green-100" 
         gradient="from-green-500 to-emerald-400"
         loading={loading}
-      />
+      /> */}
       <StatCard 
         icon={<AlertCircle className="h-6 w-6" />} 
         title="Total Incidents" 
@@ -722,14 +722,14 @@ const Dashboard: React.FC<DashboardProps> = ({ userRole = 'Employé', currentUse
         gradient="from-purple-500 to-pink-400"
         loading={loading}
       />
-      <StatCard 
+      {/* <StatCard 
         icon={<Package className="h-6 w-6" />} 
         title="Équipements Disponibles" 
         value={stats.availableEquipment} 
         color="bg-green-100" 
         gradient="from-green-500 to-emerald-400"
         loading={loading}
-      />
+      /> */}
       <StatCard 
         icon={<AlertCircle className="h-6 w-6" />} 
         title="Total Incidents" 

@@ -1,287 +1,287 @@
 const Equipement = require('../models/Equipement');
-const Affectation = require('../models/Affectation'); // Assure-toi d'importer le modèle Affectation
+const User = require('../models/User');
 
-// ✅ LISTER LES ÉQUIPEMENTS - VERSION CORRIGÉE
+const normalizeRole = (role) => {
+  if (!role) return null;
+  const normalized = role.toLowerCase().trim();
+  const roleMap = {
+    'employee': 'employee',
+    'employe': 'employee',
+    'employé': 'employee',
+    'admin': 'admin',
+    'administrator': 'admin',
+    'administrateur': 'admin',
+    'technicien': 'technician',
+    'technician': 'technician',
+    'tech': 'technician'
+  };
+  return roleMap[normalized] || normalized;
+};
+
+// ✅ VÉRIFIER SI L'UTILISATEUR EST UN EMPLOYÉ
+const isEmployee = async (userId) => {
+  if (!userId) return false;
+  try {
+    const user = await User.findById(userId).select('role');
+    if (!user) return false;
+    return normalizeRole(user.role) === 'employee';
+  } catch (err) {
+    console.error('Erreur vérification rôle:', err);
+    return false;
+  }
+};
+
+// LISTER LES ÉQUIPEMENTS
 exports.listerEquipements = async (req, res) => {
   try {
-    const userRole = req.user.role?.toLowerCase();
+    const userRole = normalizeRole(req.user.role);
     const userId = req.user._id;
-
-    console.log('[EQUIPEMENTS] Requête de listerEquipements:', {
-      userId: userId.toString(),
-      userRole,
-      userEmail: req.user.email
-    });
-
-    let equipmentIdsForEmployee = [];
-
-    // ✅ CORRECTION : Si c'est un employé, on récupère ses équipements via les affectations
-    if (userRole === 'employe') {
-      console.log('[EQUIPEMENTS] Employé détecté - Recherche des affectations actives');
-      
-      // Récupérer toutes les affectations actives de cet employé
-      const affectationsActives = await Affectation.find({
-        employeId: userId,
-        dateRetour: { $exists: false } // Pas de date de retour = affectation active
-      }).populate('equipementId', '_id');
-      
-      console.log(`[EQUIPEMENTS] ${affectationsActives.length} affectation(s) active(s) trouvée(s)`);
-      
-      // Extraire les IDs des équipements assignés
-      equipmentIdsForEmployee = affectationsActives
-        .map(aff => aff.equipementId?._id)
-        .filter(id => id != null);
-      
-      console.log('[EQUIPEMENTS] IDs équipements assignés:', equipmentIdsForEmployee);
-    }
 
     let filter = {};
 
-    // ✅ FILTRAGE PAR RÔLE
-    if (userRole === 'admin' || userRole === 'technicien') {
-      // Admin et Technicien voient tous les équipements
-      filter = {};
-      console.log(`[EQUIPEMENTS] ${userRole.toUpperCase()} détecté - Affichage de TOUS les équipements`);
-    } else if (userRole === 'employe') {
-      // Employé voit seulement les équipements qui lui sont assignés via affectations
-      if (equipmentIdsForEmployee.length > 0) {
-        filter = { _id: { $in: equipmentIdsForEmployee } };
-        console.log(`[EQUIPEMENTS] Filtre employé appliqué: ${equipmentIdsForEmployee.length} équipement(s)`);
-      } else {
-        // Aucun équipement assigné
-        filter = { _id: { $in: [] } }; // Retourne un tableau vide
-        console.log('[EQUIPEMENTS] Aucun équipement assigné à cet employé');
-      }
-    } else {
-      // Rôle inconnu - comportement sécurisé
-      filter = { _id: { $in: [] } };
-      console.log('[EQUIPEMENTS] Rôle inconnu - Aucun équipement retourné');
+    if (userRole === 'employee') {
+      filter = { assignedTo: userId };
     }
 
     const equipements = await Equipement.find(filter)
-      .populate('assignedTo', 'name email _id')
-      .populate('createdBy', 'name email _id')
+      .populate('assignedTo', 'name email')
+      .populate('createdBy', 'name email')
       .sort({ createdAt: -1 });
-
-    console.log(`[EQUIPEMENTS] ${equipements.length} équipement(s) trouvé(s) avec filtre:`, filter);
-
-    // Log détaillé pour debug
-    if (userRole === 'employe') {
-      console.log('[EQUIPEMENTS] Équipements retournés pour employé:', equipements.map(e => ({
-        id: e._id,
-        nom: e.nom,
-        type: e.type,
-        statut: e.statut
-      })));
-    }
 
     res.json({
       success: true,
       total: equipements.length,
-      userRole,
       data: equipements
     });
-
   } catch (error) {
     console.error('❌ Erreur listerEquipements:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la récupération des équipements',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 };
 
-// ✅ OBTENIR UN ÉQUIPEMENT SPÉCIFIQUE - VERSION CORRIGÉE
+// OBTENIR UN ÉQUIPEMENT
 exports.obtenirEquipement = async (req, res) => {
   try {
-    const userRole = req.user.role?.toLowerCase();
-    const userId = req.user._id;
-    const equipementId = req.params.id;
-
-    const equipement = await Equipement.findById(equipementId)
-      .populate('assignedTo', 'name email _id')
-      .populate('createdBy', 'name email _id');
+    const userRole = normalizeRole(req.user.role);
+    const equipement = await Equipement.findById(req.params.id)
+      .populate('assignedTo', 'name email')
+      .populate('createdBy', 'name email');
 
     if (!equipement) {
-      return res.status(404).json({
-        success: false,
-        message: 'Équipement non trouvé'
-      });
+      return res.status(404).json({ success: false, message: 'Équipement non trouvé' });
     }
 
-    // ✅ CORRECTION : Vérifier l'accès via les affectations pour les employés
-    if (userRole === 'employe') {
-      // Vérifier si cet équipement est assigné à l'employé via une affectation active
-      const affectationActive = await Affectation.findOne({
-        equipementId: equipementId,
-        employeId: userId,
-        dateRetour: { $exists: false } // Pas de date de retour = affectation active
-      });
-
-      if (!affectationActive) {
-        console.log('[EQUIPEMENTS] Accès refusé - Équipement non assigné à cet employé:', {
-          userRole,
-          userId: userId.toString(),
-          equipementId
-        });
-        return res.status(403).json({
-          success: false,
-          message: 'Vous n\'avez pas accès à cet équipement'
-        });
-      }
-      
-      console.log('[EQUIPEMENTS] Accès autorisé - Équipement assigné via affectation');
+    if (userRole === 'employee' && (!equipement.assignedTo || equipement.assignedTo.toString() !== req.user._id.toString())) {
+      return res.status(403).json({ success: false, message: 'Accès refusé' });
     }
 
-    res.json({
-      success: true,
-      data: equipement
-    });
-
+    res.json({ success: true, data: equipement });
   } catch (error) {
     console.error('❌ Erreur obtenirEquipement:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la récupération de l\'équipement',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 };
 
-// Garder les autres fonctions inchangées
+// AJOUTER UN ÉQUIPEMENT
+// AJOUTER UN ÉQUIPEMENT
 exports.ajouterEquipement = async (req, res) => {
   try {
-    const { nom, type, statut, assignedTo, numeroSerie, dateAchat } = req.body;
+    const { equipment, affectation } = req.body;
 
-    if (!nom || !type || !numeroSerie || !dateAchat) {
-      return res.status(400).json({
-        success: false,
-        message: 'Les champs nom, type, numeroSerie et dateAchat sont obligatoires'
-      });
+    console.log('📥 [BACKEND] Données reçues:', { equipment, affectation });
+
+    if (!equipment || !equipment.nom || !equipment.type || !equipment.numeroSerie || !equipment.dateAchat) {
+      return res.status(400).json({ success: false, message: 'Champs obligatoires manquants' });
     }
 
-    // Vérifier que numeroSerie est unique
-    const existant = await Equipement.findOne({ numeroSerie });
+    const existant = await Equipement.findOne({ numeroSerie: equipment.numeroSerie.trim().toUpperCase() });
     if (existant) {
-      return res.status(400).json({
-        success: false,
-        message: 'Ce numéro de série existe déjà'
+      return res.status(400).json({ success: false, message: 'Numéro de série déjà utilisé' });
+    }
+
+    let assignedTo = null;
+    let statut = 'Disponible';
+    const affectations = [];
+
+    // 🔥 SI AFFECTATION, ON CRÉE L'ENTRÉE DANS LA COLLECTION AFFECTATIONS
+    let affectationCreated = null;
+    if (affectation && affectation.employeId) {
+      if (!await isEmployee(affectation.employeId)) {
+        return res.status(403).json({ success: false, message: 'Assignation réservée aux employés' });
+      }
+
+      // 1. Créer l'équipement d'abord
+      const newEquipement = new Equipement({
+        nom: equipment.nom.trim(),
+        type: equipment.type,
+        numeroSerie: equipment.numeroSerie.trim().toUpperCase(),
+        dateAchat: new Date(equipment.dateAchat),
+        statut: 'Assigné',
+        assignedTo: affectation.employeId,
+        createdBy: req.user._id,
+        affectations: [{
+          assignedTo: affectation.employeId,
+          dateAffectation: new Date(),
+          etat: affectation.etat || 'Bon état'
+        }]
+      });
+
+      await newEquipement.save();
+
+      // 2. Créer l'affectation dans la collection Affectation
+      const Affectation = require('../models/Affectation');
+      affectationCreated = await Affectation.create({
+        employeId: affectation.employeId,
+        equipementId: newEquipement._id,
+        dateAffectation: new Date(),
+        etat: affectation.etat || 'Bon état',
+        createdBy: req.user._id
+      });
+
+      console.log('✅ [BACKEND] Affectation créée:', affectationCreated);
+
+      await newEquipement.populate(['assignedTo', 'createdBy']);
+
+      return res.status(201).json({
+        success: true,
+        message: 'Équipement créé et assigné',
+        data: newEquipement,
+        affectation: affectationCreated
       });
     }
 
+    // Équipement sans affectation
     const newEquipement = new Equipement({
-      nom,
-      type,
-      statut: statut || 'Disponible',
-      assignedTo: assignedTo || null,
-      numeroSerie,
-      dateAchat,
-      createdBy: req.user._id
+      nom: equipment.nom.trim(),
+      type: equipment.type,
+      numeroSerie: equipment.numeroSerie.trim().toUpperCase(),
+      dateAchat: new Date(equipment.dateAchat),
+      statut: 'Disponible',
+      assignedTo: null,
+      createdBy: req.user._id,
+      affectations: []
     });
 
     await newEquipement.save();
-
-    // Repeupler après la sauvegarde
-    await newEquipement.populate('assignedTo', 'name email _id');
-    await newEquipement.populate('createdBy', 'name email _id');
-
-    console.log('[EQUIPEMENTS] Nouvel équipement créé:', {
-      id: newEquipement._id,
-      nom: newEquipement.nom,
-      assignedTo: newEquipement.assignedTo?._id
-    });
+    await newEquipement.populate(['assignedTo', 'createdBy']);
 
     res.status(201).json({
       success: true,
-      message: 'Équipement ajouté avec succès',
+      message: 'Équipement ajouté',
       data: newEquipement
     });
-
   } catch (error) {
     console.error('❌ Erreur ajouterEquipement:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur lors de l\'ajout de l\'équipement',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
   }
 };
 
+// METTRE À JOUR UN ÉQUIPEMENT
 exports.mettreAJourEquipement = async (req, res) => {
   try {
-    const { id } = req.params;
-    const updates = req.body;
+    const { equipment, affectation } = req.body;
+    const equip = await Equipement.findById(req.params.id);
 
-    // Ne pas permettre de modifier createdBy
-    delete updates.createdBy;
-    updates.updatedBy = req.user._id;
-
-    const equipement = await Equipement.findByIdAndUpdate(
-      id,
-      updates,
-      { new: true, runValidators: true }
-    ).populate('assignedTo', 'name email _id')
-     .populate('createdBy', 'name email _id');
-
-    if (!equipement) {
-      return res.status(404).json({
-        success: false,
-        message: 'Équipement non trouvé'
-      });
+    if (!equip) {
+      return res.status(404).json({ success: false, message: 'Équipement non trouvé' });
     }
 
-    console.log('[EQUIPEMENTS] Équipement mis à jour:', {
-      id: equipement._id,
-      nom: equipement.nom,
-      assignedTo: equipement.assignedTo?._id
-    });
+    console.log('📝 [BACKEND UPDATE] Données reçues:', { equipment, affectation });
+
+    // Mise à jour champs de base
+    equip.nom = equipment?.nom?.trim() || equip.nom;
+    equip.type = equipment?.type || equip.type;
+    equip.numeroSerie = equipment?.numeroSerie?.trim()?.toUpperCase() || equip.numeroSerie;
+    equip.dateAchat = equipment?.dateAchat ? new Date(equipment.dateAchat) : equip.dateAchat;
+
+    // 🔥 IMPORTANT: Importer le modèle Affectation
+    const Affectation = require('../models/Affectation');
+
+    // Gestion assignation
+    if (affectation !== undefined) {
+      if (affectation && affectation.employeId) {
+        if (!await isEmployee(affectation.employeId)) {
+          return res.status(403).json({ success: false, message: 'Assignation réservée aux employés' });
+        }
+
+        // 1. Clôturer l'ancienne affectation dans Equipement.affectations
+        const active = equip.affectations.find(a => !a.dateRetour);
+        if (active) {
+          active.dateRetour = new Date();
+          console.log('🔄 Ancienne affectation clôturée dans Equipement');
+        }
+
+        // 2. Clôturer l'ancienne affectation dans la collection Affectation
+        const oldAffectations = await Affectation.updateMany(
+          { equipementId: equip._id, dateRetour: { $exists: false } },
+          { dateRetour: new Date(), updatedBy: req.user._id }
+        );
+        console.log(`🔄 ${oldAffectations.modifiedCount} affectation(s) clôturée(s) dans la collection`);
+
+        // 3. Nouvelle affectation dans Equipement.affectations
+        equip.affectations.push({
+          assignedTo: affectation.employeId,
+          dateAffectation: new Date(),
+          etat: affectation.etat || 'Bon état'
+        });
+
+        // 4. Créer nouvelle affectation dans la collection Affectation
+        const newAffectation = await Affectation.create({
+          employeId: affectation.employeId,
+          equipementId: equip._id,
+          dateAffectation: new Date(),
+          etat: affectation.etat || 'Bon état',
+          createdBy: req.user._id
+        });
+
+        console.log('✅ Nouvelle affectation créée:', newAffectation._id);
+
+        equip.assignedTo = affectation.employeId;
+        equip.statut = 'Assigné';
+      } else {
+        // Désassignation
+        const active = equip.affectations.find(a => !a.dateRetour);
+        if (active) {
+          active.dateRetour = new Date();
+          console.log('🔄 Affectation clôturée dans Equipement');
+        }
+
+        // Clôturer dans la collection Affectation
+        const closedAffectations = await Affectation.updateMany(
+          { equipementId: equip._id, dateRetour: { $exists: false } },
+          { dateRetour: new Date(), updatedBy: req.user._id }
+        );
+        console.log(`🔄 ${closedAffectations.modifiedCount} affectation(s) clôturée(s)`);
+
+        equip.assignedTo = null;
+        equip.statut = 'Disponible';
+      }
+    }
+
+    equip.updatedBy = req.user._id;
+    await equip.save();
+    await equip.populate(['assignedTo', 'createdBy']);
+
+    console.log('✅ Équipement mis à jour:', equip._id, '- Statut:', equip.statut);
 
     res.json({
       success: true,
-      message: 'Équipement mis à jour avec succès',
-      data: equipement
+      message: 'Équipement mis à jour',
+      data: equip
     });
-
   } catch (error) {
     console.error('❌ Erreur mettreAJourEquipement:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la mise à jour',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
   }
 };
-
+// SUPPRIMER UN ÉQUIPEMENT
 exports.supprimerEquipement = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const equipement = await Equipement.findByIdAndDelete(id);
-
-    if (!equipement) {
-      return res.status(404).json({
-        success: false,
-        message: 'Équipement non trouvé'
-      });
-    }
-
-    console.log('[EQUIPEMENTS] Équipement supprimé:', {
-      id: equipement._id,
-      nom: equipement.nom
-    });
-
-    res.json({
-      success: true,
-      message: 'Équipement supprimé avec succès'
-    });
-
+    const equip = await Equipement.findByIdAndDelete(req.params.id);
+    if (!equip) return res.status(404).json({ success: false, message: 'Équipement non trouvé' });
+    res.json({ success: true, message: 'Équipement supprimé' });
   } catch (error) {
     console.error('❌ Erreur supprimerEquipement:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la suppression',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 };

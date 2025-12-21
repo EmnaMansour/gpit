@@ -3,6 +3,8 @@ import { UserIcon, LockIcon, ArrowLeftIcon, EyeIcon, EyeOffIcon } from 'lucide-r
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Variants } from 'framer-motion';
+//import socket from "../services/socket";
+
 
 
 interface LoginProps {
@@ -44,6 +46,7 @@ export function Login({ onLogin }: LoginProps) {
   const navigate = useNavigate();
 
   useEffect(() => {
+      // socket.connect(); // connexion manuelle
     setIsVisible(true);
     const handleMouseMove = (e: MouseEvent) => setMousePosition({ x: e.clientX, y: e.clientY });
     document.addEventListener('mousemove', handleMouseMove);
@@ -65,7 +68,7 @@ export function Login({ onLogin }: LoginProps) {
     try {
       console.log('[LOGIN] Tentative de connexion pour:', email);
 
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/login`, {
+    const response = await fetch(`http://localhost:8000/api/users/login`, {
   method: 'POST',
   headers: { 
     'Content-Type': 'application/json',

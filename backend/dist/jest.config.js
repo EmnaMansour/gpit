@@ -1,14 +1,29 @@
 "use strict";
+
 module.exports = {
-    testEnvironment: 'node', // Environnement Node pour backend
-    roots: ['<rootDir>/__tests__'], // Tous les tests sont dans __tests__
-    testMatch: ['**/*.test.js'], // Tous les fichiers *.test.js
-    collectCoverage: true, // Collecter la couverture
-    collectCoverageFrom: [
-        'src/**/*.js', // Tous les fichiers source JS
-        '*.js', // Fichiers JS à la racine
-        '!**/node_modules/**'
-    ],
-    coverageDirectory: '<rootDir>/coverage',
-    verbose: true
+  preset: 'ts-jest',                  // Important : active ts-jest pour compiler TS
+  testEnvironment: 'node',
+  roots: ['<rootDir>'],
+  testRegex: '(/__tests__/.*|(\\.|/)(test|spec))\\.[jt]s$',  // Accepte .test.ts, .spec.ts, .test.js etc.
+  
+  // Ou plus simple :
+  // testMatch: ['**/__tests__/**/*.ts', '**/?(*.)+(spec|test).[jt]s?(x)'],
+
+  collectCoverage: true,
+  collectCoverageFrom: [
+    'src/**/*.{ts,tsx,js,jsx}',       // Inclut TS et JS sources
+    '*.{ts,js}',                      // Fichiers à la racine
+    '!**/node_modules/**',
+    '!**/dist/**',
+    '!**/coverage/**'
+  ],
+
+  coverageDirectory: '<rootDir>/coverage',
+  coverageReporters: ['lcov', 'text', 'html'],  // LCOV obligatoire pour SonarCloud
+
+  verbose: true,
+
+  // Optionnel mais recommandé
+  clearMocks: true,
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
 };

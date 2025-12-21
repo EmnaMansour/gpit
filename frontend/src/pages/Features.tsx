@@ -15,6 +15,7 @@ import {
   Check,
   ArrowRight,
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 export default function Features() {
   const [visibleSections, setVisibleSections] = useState(new Set())
@@ -467,12 +468,14 @@ export default function Features() {
             peut <span className="font-bold text-white">transformer</span> votre gestion IT.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-6">
+            <Link to="/contact">
             <button className="group px-10 py-5 bg-white text-blue-600 font-bold rounded-full hover:bg-blue-50 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl text-lg">
               <span className="flex items-center justify-center gap-2">
                 Nous contacter
                 <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
               </span>
             </button>
+            </Link>
           </div>
         </div>
       </div>

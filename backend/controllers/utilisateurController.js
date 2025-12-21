@@ -324,6 +324,7 @@ const updateUser = async (req, res) => {
 };
 
 // deleteUser corrigé
+// deleteUser → Version sécurisée et définitive
 const deleteUser = async (req, res) => {
   try {
     const userIdStr = req.params.userId; // ⚠️ Attention : params.userId (pas params.id)
@@ -333,8 +334,8 @@ const deleteUser = async (req, res) => {
     console.log(`${'='.repeat(70)}`);
 
     const mongoose = require('mongoose');
-    const Incident = require('../models/Incident');      // ✅ CORRIGÉ
-    const Equipement = require('../models/Equipement');  // ✅ CORRIGÉ
+    const Incident = require('../models/Incident');
+    const Equipement = require('../models/Equipement');
     const Affectation = require('../models/Affectation');
 
     // Validation ID
@@ -355,7 +356,18 @@ const deleteUser = async (req, res) => {
       });
     }
 
-    console.log(`✅ User: ${user.name} (${user.email})`);
+    console.log(`✅ User: ${user.name} (${user.email}) - Rôle: ${user.role}`);
+
+    // 🔴 PROTECTION ABSOLUE : LES ADMINS NE PEUVENT JAMAIS ÊTRE SUPPRIMÉS
+    if (user.role === 'admin') {
+      console.log('🚫 Tentative de suppression d\'un administrateur → REFUSÉE (politique de sécurité)');
+      return res.status(403).json({
+        success: false,
+        message: 'La suppression des comptes administrateurs est strictement interdite pour des raisons de sécurité.'
+      });
+    }
+
+    // Les vérifications suivantes s'appliquent uniquement aux employés et techniciens
 
     // 🔍 VÉRIFICATION 1: INCIDENTS
     const incidents = await Incident.find({
@@ -363,7 +375,7 @@ const deleteUser = async (req, res) => {
     });
 
     if (incidents.length > 0) {
-      console.log(`❌ BLOCAGE: ${incidents.length} incident(s)`);
+      console.log(`❌ BLOCAGE: ${incidents.length} incident(s) lié(s)`);
       return res.status(400).json({
         success: false,
         message: `Impossible de supprimer: ${incidents.length} incident(s) lié(s)`
@@ -381,44 +393,34 @@ const deleteUser = async (req, res) => {
 
     if (affectationsActives.length > 0) {
       const equipList = affectationsActives
-        .map(a => a.equipementId?.nom)
+        .map(a => a.equipementId?.nom || 'Inconnu')
+        .filter(Boolean)
         .join(', ');
       
-      console.log(`❌ BLOCAGE: ${affectationsActives.length} équipement(s)`);
+      console.log(`❌ BLOCAGE: ${affectationsActives.length} équipement(s) assigné(s)`);
       
       return res.status(400).json({
         success: false,
-        message: `Impossible de supprimer: ${affectationsActives.length} équipement(s) assigné(s) (${equipList})`
+        message: `Impossible de supprimer: ${affectationsActives.length} équipement(s) assigné(s) (${equipList || 'non spécifiés'})`
       });
     }
 
-    // 🔍 VÉRIFICATION 3: ÉQUIPEMENTS CRÉÉS
+    // 🔍 VÉRIFICATION 3: ÉQUIPEMENTS CRÉÉS PAR L'UTILISATEUR
     const equipementsCrees = await Equipement.find({ createdBy: userId });
 
     if (equipementsCrees.length > 0) {
-      console.log(`❌ BLOCAGE: ${equipementsCrees.length} équipement(s) créés`);
+      console.log(`❌ BLOCAGE: ${equipementsCrees.length} équipement(s) créés par cet utilisateur`);
       return res.status(400).json({
         success: false,
-        message: `Impossible de supprimer: ${equipementsCrees.length} équipement(s) créé(s)`
+        message: `Impossible de supprimer: ${equipementsCrees.length} équipement(s) créé(s) par cet utilisateur`
       });
     }
 
-    // ✅ VÉRIFICATION DERNIER ADMIN
-    if (user.role === 'admin') {
-      const adminCount = await User.countDocuments({ role: 'admin' });
-      if (adminCount <= 1) {
-        return res.status(400).json({
-          success: false,
-          message: 'Impossible de supprimer le dernier admin'
-        });
-      }
-    }
-
-    // ✅ SUPPRESSION
-    console.log(`✅ SUPPRESSION AUTORISÉE`);
+    // ✅ SUPPRESSION AUTORISÉE (uniquement pour employe / technicien sans dépendances)
+    console.log(`✅ SUPPRESSION AUTORISÉE pour l'utilisateur ${user.role}: ${user.name}`);
     await User.findByIdAndDelete(userId);
 
-    console.log(`✅ User "${user.name}" supprimé\n`);
+    console.log(`✅ Utilisateur "${user.name}" supprimé avec succès\n`);
 
     res.status(200).json({
       success: true,
@@ -426,10 +428,10 @@ const deleteUser = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ [DELETE] Erreur:', error);
+    console.error('❌ [DELETE USER] Erreur inattendue:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur',
+      message: 'Erreur serveur lors de la suppression',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }

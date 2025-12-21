@@ -1,6 +1,5 @@
 /// <reference types="cypress" />
 
-
 describe('Dashboard Tests', () => {
   const login = (email: string, password: string) => {
     cy.visit('/', { timeout: 30000 });
@@ -22,10 +21,9 @@ describe('Dashboard Tests', () => {
       .should('be.visible')
       .click();
 
-    cy.url().should('include', '/dashboard', { timeout: 15000 });
+    cy.url({ timeout: 15000 }).should('include', '/dashboard');
     cy.get('body').should('exist');
   };
-
 
   const checkDashboardElements = (role: 'Admin' | 'Technicien' | 'Employé') => {
     // On attend que le dashboard charge les incidents depuis l'API
@@ -35,21 +33,21 @@ describe('Dashboard Tests', () => {
     cy.wait(2000); // sécurité pour que React affiche tout
 
     if (role === 'Admin') {
-      cy.contains('total utilisateurs', { timeout: 15000 }).should('exist');
-      cy.contains('total équipements', { timeout: 15000 }).should('exist');
-      cy.contains('total incidents', { timeout: 15000 }).should('exist');
-      cy.contains('incidents actifs', { timeout: 15000 }).should('exist');
-      cy.contains('incidents récents', { timeout: 15000 }).should('exist');
-      cy.contains('utilisateurs récents', { timeout: 15000 }).should('exist');
+      cy.contains(/total utilisateurs/i, { timeout: 15000 }).should('exist');
+      cy.contains(/total équipements/i, { timeout: 15000 }).should('exist');
+      cy.contains(/total incidents/i, { timeout: 15000 }).should('exist');
+      cy.contains(/incidents actifs/i, { timeout: 15000 }).should('exist');
+      cy.contains(/incidents récents/i, { timeout: 15000 }).should('exist');
+      cy.contains(/utilisateurs récents/i, { timeout: 15000 }).should('exist');
     } else if (role === 'Technicien') {
-      cy.contains('total équipements', { timeout: 15000 }).should('exist');
-      cy.contains('total incidents', { timeout: 15000 }).should('exist');
-      cy.contains('incidents actifs', { timeout: 15000 }).should('exist');
-      cy.contains('incidents récents', { timeout: 15000 }).should('exist');
+      cy.contains(/total équipements/i, { timeout: 15000 }).should('exist');
+      cy.contains(/total incidents/i, { timeout: 15000 }).should('exist');
+      cy.contains(/incidents actifs/i, { timeout: 15000 }).should('exist');
+      cy.contains(/incidents récents/i, { timeout: 15000 }).should('exist');
     } else if (role === 'Employé') {
-      cy.contains('incident', { timeout: 15000 }).should('exist');
-      cy.contains('incidents actifs', { timeout: 15000 }).should('exist');
-      cy.contains('incidents récents', { timeout: 15000 }).should('exist');
+      cy.contains(/incident/i, { timeout: 15000 }).should('exist');
+      cy.contains(/incidents actifs/i, { timeout: 15000 }).should('exist');
+      cy.contains(/incidents récents/i, { timeout: 15000 }).should('exist');
     }
   };
 
@@ -62,13 +60,8 @@ describe('Dashboard Tests', () => {
   });
 
   it('Admin Dashboard', () => {
-<<<<<<< HEAD
     login('admin@gmail.com', 'admin123');
     checkDashboardElements('Admin');
-=======
-    login('admin@gmail.com', 'admin');
-    checkDashboardElements('Admin123');
->>>>>>> 5221650f059fe57bf0a1e409f62b0fc6ea369506
   });
 
   it('Technicien Dashboard', () => {

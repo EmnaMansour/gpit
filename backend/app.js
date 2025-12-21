@@ -60,7 +60,7 @@ app.set('sendIncidentNotification', async () => {});
 
 // --- CORS ---
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174' , 'http://44.210.225.211/'],
+  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
@@ -70,10 +70,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // --- Connexion MongoDB ---
+// --- Connexion MongoDB ---
 mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/gestion_parc')
-  .then(() => console.log(' MongoDB connecté'))
+  .then(() => {
+    console.log('✓ MongoDB connecté');
+    console.log('📦 Base de données utilisée:', mongoose.connection.name);
+    console.log('🔗 URI:', process.env.MONGO_URI?.replace(/\/\/.*:.*@/, '//****:****@')); // Masque le mot de passe
+  })
   .catch(err => {
-    console.error(' Erreur MongoDB :', err);
+    console.error('✗ Erreur MongoDB :', err);
     process.exit(1);
   });
 
@@ -201,16 +206,20 @@ app.use((err, req, res, next) => {
 });
 
 // --- Démarrage du serveur ---
-if (require.main == module) {
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(' BACKEND GPIT v4.1 - DÉMARRÉ');
-  console.log(` Serveur: http://0.0.0.0:${PORT}`);
-    console.log(` Chatbot IA: ${io ? ' Actif' : ' Désactivé'}`);
-//    console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(` Service email: ${process.env.EMAIL_USER ? 'Gmail' : 'Ethereal (Test)'}`);
-    console.log(` Actions rapides: http://localhost:${PORT}/api/users/quick-approve/:id`);
-    console.log(` Actions rapides: http://localhost:${PORT}/api/users/quick-reject/:id`);
+const startServer = () => {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log('🚀 BACKEND GPIT v4.1 - DÉMARRÉ');
+    console.log(`🌐 Serveur: http://0.0.0.0:${PORT}`);
+    console.log(`🤖 Chatbot IA: ${io ? '✓ Actif' : '✗ Désactivé'}`);
+    console.log(`📧 Service email: ${process.env.EMAIL_USER ? '✓ Gmail' : '✓ Ethereal (Test)'}`);
+    console.log(`⚡ Actions rapides: http://localhost:${PORT}/api/users/quick-approve/:id`);
+    console.log(`⚡ Actions rapides: http://localhost:${PORT}/api/users/quick-reject/:id`);
   });
+};
+
+// Démarrer uniquement si appelé directement OU si dans Docker (NODE_ENV=production)
+if (require.main === module || process.env.NODE_ENV === 'production') {
+  startServer();
 }
 
 // --- Arrêt propre ---

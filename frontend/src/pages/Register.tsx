@@ -92,7 +92,7 @@ const Register = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'employe',
+    role: 'employe'as const,
     phone: '',
     department: ''
   });
@@ -545,25 +545,28 @@ const particlesCount = 30;
                   animate={{ opacity: 1, x: 0 }}
                   className="space-y-4"
                 >
-                  <div className="space-y-2">
-                    <label htmlFor="role" className="block text-sm font-medium text-blue-300">
-                      Type de compte demandé
-                    </label>
-                    <select
-                      id="role"
-                      name="role"
-                      value={formData.role}
-                      onChange={handleChange}
-                      className="w-full rounded-xl border border-gray-600 bg-gray-900/50 py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      disabled={loading}
-                    >
-                      <option value="employe">Employé</option>
-                      <option value="technicien">Technicien</option>
-                    </select>
-                    <p className="text-gray-400 text-xs">
-                      Le type de compte déterminera vos permissions après validation
-                    </p>
-                  </div>
+                 <div className="space-y-2">
+  <label className="block text-sm font-medium text-blue-300">
+    Type de compte
+  </label>
+  <div className="bg-gradient-to-r from-blue-900/50 to-blue-800/50 border border-blue-600/60 rounded-xl px-5 py-4 backdrop-blur-sm">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-white font-semibold text-lg">Employé</p>
+        <p className="text-blue-200 text-xs mt-1 leading-relaxed">
+          Seuls les employés peuvent s’inscrire via ce formulaire.<br />
+          Les comptes <span className="font-medium">Technicien</span> sont créés exclusivement par l’administrateur.
+        </p>
+      </div>
+      <div className="text-blue-400">
+        <UserIcon className="h-10 w-10 opacity-70" />
+      </div>
+    </div>
+  </div>
+
+  {/* Champ caché pour envoyer le rôle au backend */}
+  <input type="hidden" name="role" value="employe" />
+</div>
 
                   <div className="space-y-2">
                     <label htmlFor="password" className="block text-sm font-medium text-blue-300">

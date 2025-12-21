@@ -245,6 +245,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, user, mode, onSu
                 Nom complet *
               </label>
               <input
+                id='nameInput'
                 type="text"
                 value={formData.name}
                 onChange={(e) => handleInputChange('name', e.target.value)}
@@ -261,6 +262,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, user, mode, onSu
                 Email *
               </label>
               <input
+              id='emailInput'
                 type="email"
                 value={formData.email}
                 onChange={(e) => handleInputChange('email', e.target.value)}
@@ -277,6 +279,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, user, mode, onSu
                 Rôle *
               </label>
               <select
+                id='roleSelect'
                 value={formData.role}
                 onChange={(e) => handleInputChange('role', e.target.value as any)}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -294,6 +297,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, user, mode, onSu
                 Département
               </label>
               <input
+                id='departmentInput'
                 type="text"
                 value={formData.department}
                 onChange={(e) => handleInputChange('department', e.target.value)}
@@ -311,6 +315,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, user, mode, onSu
                     Mot de passe *
                   </label>
                   <input
+                    id='passwordInput'
                     type="password"
                     value={formData.password}
                     onChange={(e) => handleInputChange('password', e.target.value)}
@@ -326,6 +331,7 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, user, mode, onSu
                     Confirmer le mot de passe *
                   </label>
                   <input
+                    id='confirmPasswordInput'
                     type="password"
                     value={formData.confirmPassword}
                     onChange={(e) => handleInputChange('confirmPassword', e.target.value)}

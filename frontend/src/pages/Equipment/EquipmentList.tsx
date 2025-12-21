@@ -39,9 +39,41 @@ interface Equipment {
   numeroSerie: string;
   dateAchat: string;
   qrCodePath?: string;
-  createdBy?: string;
-  updatedBy?: string;
+  createdBy?: { _id: string; name: string; email: string; role?: string } | string;
+  // updatedBy?: { _id: string; name: string; email: string; role?: string } | string;
 }
+
+// ===== À AJOUTER DANS LES FONCTIONS UTILITAIRES =====
+const normalizeRoleDisplay = (role?: string): string => {
+  if (!role) return 'Inconnu';
+  const normalized = role.toLowerCase().trim();
+  const map: Record<string, string> = {
+    admin: 'Admin',
+    administrateur: 'Admin',
+    technicien: 'Technicien',
+    technician: 'Technicien',
+    employee: 'Employé',
+    employe: 'Employé',
+    employé: 'Employé',
+  };
+  return map[normalized] || 'Inconnu';
+};
+
+const getUserDisplay = (user: any, fallback: string = '-'): string => {
+  if (!user) return fallback;
+
+  let name = 'Inconnu';
+  let role = '';
+
+  if (typeof user === 'object' && user !== null) {
+    name = user.name || user.email || 'Inconnu';
+    role = user.role ? ` (${normalizeRoleDisplay(user.role)})` : '';
+  } else if (typeof user === 'string') {
+    name = user;
+  }
+
+  return `${name}${role}`;
+};
 
 interface User {
   _id: string;
@@ -146,7 +178,10 @@ const EquipmentModal: React.FC<EquipmentModalProps> = ({
         nom: equipment.nom || '',
         type: equipment.type || '',
         numeroSerie: equipment.numeroSerie || '',
-        dateAchat: equipment.dateAchat || '',
+        dateAchat: equipment.dateAchat 
+        ? new Date(equipment.dateAchat).toISOString().slice(0, 10) 
+        : '',
+                
         statut: equipment.statut || 'Disponible'
       });
 
@@ -246,6 +281,7 @@ const EquipmentModal: React.FC<EquipmentModalProps> = ({
   };
 
   if (!isOpen) return null;
+  
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -353,14 +389,25 @@ const EquipmentModal: React.FC<EquipmentModalProps> = ({
                   className="w-full bg-gray-800/50 border border-gray-700 rounded-xl shadow-sm py-3 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white"
                 >
                   <option value="">Non assigné</option>
-                  {employees
-                    .filter(emp => emp && emp._id)
+                {employees
+                    .filter(emp => {
+                      console.log("EMP:", emp); // debug
+                      return (
+                        emp &&
+                        emp._id &&
+                        (emp.role || emp.type) &&
+                        ['employé', 'employe', 'employee'].includes(
+                          (emp.role || emp.type).toLowerCase().trim()
+                        )
+                      );
+                    })
                     .map(employee => (
                       <option key={employee._id} value={employee._id}>
                         {employee.name} ({employee.email})
                       </option>
-                    ))
-                  }
+                    ))}
+
+
                 </select>
                 <p className="text-xs text-gray-400 mt-1">
                   Laisser vide si l'équipement n'est pas assigné
@@ -899,6 +946,8 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ userRole, currentUserId }
   
  // ✅ CORRECTION - Dans EquipmentList component - handleSaveEquipment
 
+// ✅ VERSION FINALE - Remplace handleSaveEquipment dans EquipmentList.tsx
+
 const handleSaveEquipment = async (saveData: any) => {
   setApiLoading(true);
   try {
@@ -919,82 +968,45 @@ const handleSaveEquipment = async (saveData: any) => {
     if (mode === 'add') {
       console.log('➕ [MODE AJOUT]');
       
-      // ========================================
-      // ÉTAPE 1: Créer l'équipement
-      // ========================================
-      const equipmentPayload = {
-        nom: equipment.nom.trim(),
-        type: equipment.type,
-        numeroSerie: equipment.numeroSerie.trim(),
-        dateAchat: equipment.dateAchat,
-        statut: 'Disponible', // Statut initial
-        createdBy: createdById
-      };
+      // 🔥 CORRECTION: Le backend attend { equipment: {...}, affectation: {...} }
+     const payload = {
+  equipment: {
+    nom: equipment.nom.trim(),
+    type: equipment.type,
+    numeroSerie: equipment.numeroSerie.trim().toUpperCase(),
+    dateAchat: equipment.dateAchat,
+    statut: affectation?.employeId ? "Assigné" : "Disponible"
+  },
+  affectation: affectation?.employeId ? {
+    employeId: affectation.employeId,
+    etat: affectation.etat || 'Bon état'
+  } : null
+};
 
-      console.log('📦 [ÉTAPE 1] Création équipement:', equipmentPayload);
 
-      const equipmentResponse = await axios.post(`${API_BASE_URL}/equipements`, equipmentPayload, {
-        headers: getAuthHeaders(),
-        timeout: 15000
-      });
+      console.log('📦 [ÉTAPE 1] Création équipement avec payload:', JSON.stringify(payload, null, 2));
+      console.log('🔍 Affectation envoyée:', payload.affectation);
+
+      const equipmentResponse = await axios.post(
+        `${API_BASE_URL}/equipements`, 
+        payload,
+        {
+          headers: getAuthHeaders(),
+          timeout: 15000
+        }
+      );
       
-      // 🔥 CORRECTION: Récupérer le bon format de réponse
-      let newEquipment;
-      if (equipmentResponse.data.data) {
-        newEquipment = equipmentResponse.data.data;
-      } else if (equipmentResponse.data.equipment) {
-        newEquipment = equipmentResponse.data.equipment;
-      } else {
-        newEquipment = equipmentResponse.data;
-      }
+      const newEquipment = equipmentResponse.data?.data || equipmentResponse.data;
 
-      console.log('✅ [ÉTAPE 1] Équipement créé:', newEquipment);
+      console.log('✅ Équipement créé:', newEquipment);
+      console.log('📋 Affectations dans l\'équipement:', newEquipment?.affectations);
+      console.log('👤 AssignedTo:', newEquipment?.assignedTo);
+      console.log('📊 Statut:', newEquipment?.statut);
 
-      if (!newEquipment || !newEquipment._id) {
-        throw new Error('ID équipement manquant dans la réponse');
-      }
-
-      // ========================================
-      // ÉTAPE 2: Créer l'affectation SI employé sélectionné
-      // ========================================
-      if (affectation && affectation.employeId) {
-        console.log('👥 [ÉTAPE 2] Création affectation - employeId:', affectation.employeId);
-
-        const affectationPayload = {
-          employeId: affectation.employeId,
-          equipementId: newEquipment._id,
-          etat: affectation.etat || 'Bon état',
-          dateAffectation: today
-        };
-
-        console.log('📋 Payload affectation:', affectationPayload);
-
-        try {
-          const affectationResponse = await axios.post(`${API_BASE_URL}/affectations`, affectationPayload, {
-            headers: getAuthHeaders(),
-            timeout: 15000
-          });
-
-          console.log('✅ [ÉTAPE 2] Affectation créée:', affectationResponse.data);
-
-          // ========================================
-          // ÉTAPE 3: Mettre à jour le statut de l'équipement
-          // ========================================
-          console.log('🔄 [ÉTAPE 3] Mise à jour statut équipement -> Assigné');
-
-          await axios.put(`${API_BASE_URL}/equipements/${newEquipment._id}`, {
-            statut: 'Assigné',
-            updatedBy: createdById
-          }, {
-            headers: getAuthHeaders(),
-            timeout: 15000
-          });
-
-          console.log('✅ [ÉTAPE 3] Statut mis à jour');
-
-          const assignedEmployee = employees.find(emp => emp._id === affectation.employeId);
-          
-          alert(`✅ Équipement créé et assigné avec succès !
+      if (affectation?.employeId) {
+        const assignedEmployee = employees.find(emp => emp._id === affectation.employeId);
+        
+        alert(`✅ Équipement créé et assigné avec succès !
 
 📦 Équipement:
 • Nom: ${equipment.nom}
@@ -1007,36 +1019,7 @@ const handleSaveEquipment = async (saveData: any) => {
 • Email: ${assignedEmployee?.email || '-'}
 • État: ${affectation.etat}
 • Date: ${new Date().toLocaleDateString('fr-FR')}`);
-
-        } catch (affectationError) {
-          console.error('❌ [ÉTAPE 2] Erreur création affectation:', affectationError);
-          
-          // Si l'affectation échoue, supprimer l'équipement créé
-          try {
-            await axios.delete(`${API_BASE_URL}/equipements/${newEquipment._id}`, {
-              headers: getAuthHeaders()
-            });
-            console.log('🗑️ Équipement supprimé suite à l\'erreur d\'affectation');
-          } catch (deleteError) {
-            console.error('❌ Erreur suppression équipement:', deleteError);
-          }
-          
-          // Normaliser le message d'erreur de manière sûre (catch binding est 'unknown' en TS)
-          let errorMessage = 'Erreur inconnue';
-          if (axios.isAxiosError(affectationError)) {
-            errorMessage = affectationError.response?.data?.message || affectationError.message || String(affectationError);
-          } else if (affectationError instanceof Error) {
-            errorMessage = affectationError.message;
-          } else {
-            errorMessage = String(affectationError);
-          }
-
-          throw new Error(`Échec création affectation: ${errorMessage}`);
-        }
-
       } else {
-        console.log('ℹ️ Aucune affectation - Équipement reste disponible');
-        
         alert(`✅ Équipement créé avec succès !
 
 📦 Détails:
@@ -1051,51 +1034,33 @@ const handleSaveEquipment = async (saveData: any) => {
       // ========================================
       // MODE ÉDITION
       // ========================================
-      console.log('✏️ [MODE ÉDITION]');
+      console.log('✏️ [MODE ÉDITION] ID:', existingEquipmentId);
       
-      const statut = affectation?.employeId ? 'Assigné' : 'Disponible';
+      const payload = {
+        equipment: {
+          nom: equipment.nom.trim(),
+          type: equipment.type,
+          numeroSerie: equipment.numeroSerie.trim().toUpperCase(),
+          dateAchat: equipment.dateAchat
+        },
+        affectation: affectation?.employeId ? {
+          employeId: affectation.employeId,
+          etat: affectation.etat || 'Bon état'
+        } : null
+      };
 
-      await axios.put(`${API_BASE_URL}/equipements/${existingEquipmentId}`, {
-        nom: equipment.nom.trim(),
-        type: equipment.type,
-        numeroSerie: equipment.numeroSerie.trim(),
-        dateAchat: equipment.dateAchat,
-        statut: statut,
-        updatedBy: createdById
-      }, {
-        headers: getAuthHeaders(),
-        timeout: 15000
-      });
+      console.log('📝 Mise à jour avec payload:', JSON.stringify(payload, null, 2));
 
-      const currentAffectationId = getAffectationId(existingEquipmentId);
-      
-      if (affectation?.employeId) {
-        if (currentAffectationId) {
-          // Mettre à jour l'affectation existante
-          await axios.put(`${API_BASE_URL}/affectations/${currentAffectationId}`, {
-            employeId: affectation.employeId,
-            etat: affectation.etat,
-            dateAffectation: today,
-            dateRetour: null,
-            updatedBy: createdById
-          }, {
-            headers: getAuthHeaders(),
-            timeout: 15000
-          });
-        } else {
-          // Créer une nouvelle affectation
-          await axios.post(`${API_BASE_URL}/affectations`, {
-            employeId: affectation.employeId,
-            equipementId: existingEquipmentId,
-            etat: affectation.etat,
-            dateAffectation: today,
-            createdBy: createdById
-          }, {
-            headers: getAuthHeaders(),
-            timeout: 15000
-          });
+      await axios.put(
+        `${API_BASE_URL}/equipements/${existingEquipmentId}`,
+        payload,
+        {
+          headers: getAuthHeaders(),
+          timeout: 15000
         }
+      );
 
+      if (affectation?.employeId) {
         const assignedEmployee = employees.find(emp => emp._id === affectation.employeId);
         alert(`✅ Équipement modifié et assigné !
 
@@ -1104,16 +1069,6 @@ const handleSaveEquipment = async (saveData: any) => {
 • État: ${affectation.etat}
 • Date: ${new Date().toLocaleDateString('fr-FR')}`);
       } else {
-        if (currentAffectationId) {
-          // Retourner l'équipement
-          await axios.put(`${API_BASE_URL}/affectations/${currentAffectationId}`, {
-            dateRetour: today,
-            updatedBy: createdById
-          }, {
-            headers: getAuthHeaders(),
-            timeout: 15000
-          });
-        }
         alert(`✅ Équipement modifié !
 
 • ${equipment.nom}
@@ -1121,9 +1076,7 @@ const handleSaveEquipment = async (saveData: any) => {
       }
     }
 
-    // ========================================
-    // RECHARGER LES DONNÉES
-    // ========================================
+    // Recharger les données
     console.log('🔄 Rechargement des données...');
     await loadData();
     
@@ -1131,15 +1084,19 @@ const handleSaveEquipment = async (saveData: any) => {
     setSelectedEquipment(null);
     
   } catch (error: any) {
-    console.error('❌ [SAVE] Erreur:', error);
+    console.error('❌ [SAVE] Erreur complète:', error);
     
     let errorMessage = "Erreur lors de la sauvegarde";
+    
     if (axios.isAxiosError(error)) {
       const responseData = error.response?.data;
-      errorMessage = responseData?.error || responseData?.message || error.message || `Erreur ${error.response?.status}`;
-      console.error('📋 Détails erreur API:', responseData);
-    } else {
-      errorMessage = error.message || errorMessage;
+      errorMessage = responseData?.message || error.message;
+      
+      console.error('Status:', error.response?.status);
+      console.error('Response:', JSON.stringify(responseData, null, 2));
+      console.error('Request:', JSON.stringify(error.config?.data, null, 2));
+    } else if (error instanceof Error) {
+      errorMessage = error.message;
     }
     
     alert(`❌ ${errorMessage}`);
@@ -1355,123 +1312,136 @@ const handleSaveEquipment = async (saveData: any) => {
         <div className="bg-gradient-to-br from-gray-900/90 to-gray-800/80 backdrop-blur-xl rounded-2xl border border-gray-700/30 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-700/50">
-              <thead className="bg-gray-800/50">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">ÉQUIPEMENT</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">TYPE</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">STATUT</th>
-                  {(userRole === 'Admin' || userRole === 'Technicien') && (
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">EMPLOYÉ ASSIGNÉ</th>
+      <thead className="bg-gray-800/50">
+        <tr>
+          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">ÉQUIPEMENT</th>
+          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">TYPE</th>
+          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">STATUT</th>
+          {(userRole === 'Admin' || userRole === 'Technicien') && (
+            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">EMPLOYÉ ASSIGNÉ</th>
+          )}
+          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">ÉTAT</th>
+          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">DATE D'AFFECTATION</th>
+          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">N° DE SÉRIE</th>
+          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">DATE D'ACHAT</th>
+          
+          {/* 🔥 NOUVELLES COLONNES - visibles seulement pour Admin/Technicien */}
+          {userRole !== 'Employé' && (
+            <>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">CRÉÉ PAR</th>
+              {/* <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">MODIFIÉ PAR</th> */}
+            </>
+          )}
+          
+          <th className="px-6 py-4 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">ACTIONS</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-gray-700/50">
+        {filteredEquipment.map((equipment) => {
+          const assignedEmployee = getAssignedEmployee(equipment._id);
+          const affectationEtat = getAffectationEtat(equipment._id);
+          const affectationDate = getAffectationDate(equipment._id);
+          
+          return (
+            <tr key={equipment._id} className="hover:bg-gray-800/30 transition-colors duration-200">
+              <td className="px-6 py-4">
+                <div className="flex items-center">
+                  <Package className="h-5 w-5 text-blue-400 mr-3" />
+                  <div className="text-sm font-semibold text-white">{equipment.nom}</div>
+                </div>
+              </td>
+              <td className="px-6 py-4 text-sm text-gray-300">{equipment.type}</td>
+              <td className="px-6 py-4">
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(equipment.statut)}`}>
+                  {getStatusIcon(equipment.statut)}
+                  <span className="ml-1">{equipment.statut}</span>
+                </span>
+              </td>
+              {(userRole === 'Admin' || userRole === 'Technicien') && (
+                <td className="px-6 py-4 text-sm text-gray-300">
+                  {assignedEmployee ? (
+                    <div className="flex items-center">
+                      <User className="h-4 w-4 text-green-400 mr-2" />
+                      <span>{assignedEmployee.name}</span>
+                    </div>
+                  ) : (
+                    <span className="text-gray-500">-</span>
                   )}
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">ÉTAT</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">DATE D'AFFECTATION</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">N° DE SÉRIE</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">DATE D'ACHAT</th>
-                  <th className="px-6 py-4 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-700/50">
-                {filteredEquipment.map((equipment) => {
-                  const assignedEmployee = getAssignedEmployee(equipment._id);
-                  const affectationEtat = getAffectationEtat(equipment._id);
-                  const affectationDate = getAffectationDate(equipment._id);
-                  
-                  return (
-                    <tr key={equipment._id} className="hover:bg-gray-800/30 transition-colors duration-200">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center">
-                          <Package className="h-5 w-5 text-blue-400 mr-3" />
-                          <div className="text-sm font-semibold text-white">{equipment.nom}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-300">{equipment.type}</td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(equipment.statut)}`}>
-                          {getStatusIcon(equipment.statut)}
-                          <span className="ml-1">{equipment.statut}</span>
-                        </span>
-                      </td>
-                      {(userRole === 'Admin' || userRole === 'Technicien') && (
-                        <td className="px-6 py-4 text-sm text-gray-300">
-                          {assignedEmployee ? (
-                            <div className="flex items-center">
-                              <User className="h-4 w-4 text-green-400 mr-2" />
-                              <span>{assignedEmployee.name}</span>
-                            </div>
-                          ) : (
-                            <span className="text-gray-500">-</span>
-                          )}
-                        </td>
-                      )}
-                      <td className="px-6 py-4 text-sm text-gray-300">
-                        {affectationEtat !== '-' ? (
-                          <span className="capitalize bg-gray-700/50 px-2 py-1 rounded-lg border border-gray-600">
-                            {affectationEtat}
-                          </span>
-                        ) : (
-                          <span className="text-gray-500 italic">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-300">
-                        {affectationDate !== '-' ? (
-                          <div className="flex items-center">
-                            <Calendar className="h-3 w-3 mr-1 text-blue-400" />
-                            {formatDate(affectationDate)}
-                          </div>
-                        ) : (
-                          <span className="text-gray-500 italic">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-sm font-mono text-blue-400">{equipment.numeroSerie}</td>
-                      <td className="px-6 py-4 text-sm text-gray-300">{formatDate(equipment.dateAchat)}</td>
-                      <td className="px-6 py-4 text-right text-sm font-medium">
-                        <div className="flex justify-end space-x-2">
-                          {canViewQRCode() && (
-                            <button
-                              onClick={() => handleQRCode(equipment)}
-                              className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20 rounded-xl transition-all duration-200 border border-blue-500/30"
-                              title="Générer QR Code"
-                            >
-                              <QrCode className="h-4 w-4" />
-                            </button>
-                          )}
-
-                          {canAddEditEquipment() && (
-                            <button
-                              onClick={() => handleEdit(equipment)}
-                              className="p-2 text-green-400 hover:text-green-300 hover:bg-green-500/20 rounded-xl transition-all duration-200 border border-green-500/30"
-                              title="Modifier"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </button>
-                          )}
-
-                          {canUnassignEquipment() && equipment.statut === 'Assigné' && (
-                            <button
-                              onClick={() => handleUnassign(equipment._id)}
-                              className="p-2 text-orange-400 hover:text-orange-300 hover:bg-orange-500/20 rounded-xl transition-all duration-200 border border-orange-500/30"
-                              title="Désaffecter"
-                            >
-                              <UserMinus className="h-4 w-4" />
-                            </button>
-                          )}
-
-                          {canDeleteEquipment() && (
-                            <button
-                              onClick={() => handleDelete(equipment._id)}
-                              className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded-xl transition-all duration-200 border border-red-500/30"
-                              title="Supprimer"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                </td>
+              )}
+              <td className="px-6 py-4 text-sm text-gray-300">
+                {affectationEtat !== '-' ? (
+                  <span className="capitalize bg-gray-700/50 px-2 py-1 rounded-lg border border-gray-600">
+                    {affectationEtat}
+                  </span>
+                ) : (
+                  <span className="text-gray-500 italic">-</span>
+                )}
+              </td>
+              <td className="px-6 py-4 text-sm text-gray-300">
+                {affectationDate !== '-' ? (
+                  <div className="flex items-center">
+                    <Calendar className="h-3 w-3 mr-1 text-blue-400" />
+                    {formatDate(affectationDate)}
+                  </div>
+                ) : (
+                  <span className="text-gray-500 italic">-</span>
+                )}
+              </td>
+              <td className="px-6 py-4 text-sm font-mono text-blue-400">{equipment.numeroSerie}</td>
+              <td className="px-6 py-4 text-sm text-gray-300">{formatDate(equipment.dateAchat)}</td>
+              
+              {/* 🔥 NOUVELLES CELLULES */}
+              {userRole !== 'Employé' && (
+                <>
+                  <td className="px-6 py-4 text-sm text-gray-300">
+                    <div className="flex items-center">
+                      <User className="h-4 w-4 text-cyan-400 mr-2" />
+                      <span>{getUserDisplay(equipment.createdBy)}</span>
+                    </div>
+                  </td>
+                  {/* <td className="px-6 py-4 text-sm text-gray-300">
+                    {equipment.updatedBy ? (
+                      <div className="flex items-center">
+                        <Edit className="h-4 w-4 text-orange-400 mr-2" />
+                        <span>{getUserDisplay(equipment.updatedBy)}</span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-500 italic">-</span>
+                    )}
+                  </td> */}
+                </>
+              )}
+              
+              <td className="px-6 py-4 text-right text-sm font-medium">
+                <div className="flex justify-end space-x-2">
+                  {canViewQRCode() && (
+                    <button onClick={() => handleQRCode(equipment)} className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20 rounded-xl transition-all duration-200 border border-blue-500/30" title="Générer QR Code">
+                      <QrCode className="h-4 w-4" />
+                    </button>
+                  )}
+                  {canAddEditEquipment() && (
+                    <button onClick={() => handleEdit(equipment)} className="p-2 text-green-400 hover:text-green-300 hover:bg-green-500/20 rounded-xl transition-all duration-200 border border-green-500/30" title="Modifier">
+                      <Edit className="h-4 w-4" />
+                    </button>
+                  )}
+                  {canUnassignEquipment() && equipment.statut === 'Assigné' && (
+                    <button onClick={() => handleUnassign(equipment._id)} className="p-2 text-orange-400 hover:text-orange-300 hover:bg-orange-500/20 rounded-xl transition-all duration-200 border border-orange-500/30" title="Désaffecter">
+                      <UserMinus className="h-4 w-4" />
+                    </button>
+                  )}
+                  {canDeleteEquipment() && (
+                    <button onClick={() => handleDelete(equipment._id)} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded-xl transition-all duration-200 border border-red-500/30" title="Supprimer">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
           </div>
 
           {filteredEquipment.length === 0 && (

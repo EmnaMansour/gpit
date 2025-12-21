@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { ArrowRight, Users, Monitor, AlertCircle } from 'lucide-react'
 
 export function HeroSection() {
+
+
   const [visibleSections, setVisibleSections] = useState(new Set())
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
 
@@ -124,7 +127,8 @@ export function HeroSection() {
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </span>
               </button>
-              <button 
+             <Link to="/register">
+              <button
                 className="group px-8 py-4 bg-transparent border-2 border-white/30 text-white font-semibold rounded-full hover:bg-white/10 hover:border-white/50 transition-all duration-300 backdrop-blur-sm"
               >
                 <span className="flex items-center justify-center gap-2">
@@ -132,6 +136,7 @@ export function HeroSection() {
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </span>
               </button>
+            </Link>
             </div>
           </div>
 

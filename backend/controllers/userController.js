@@ -628,24 +628,28 @@ const getUserStatusByEmail = async (req, res) => {
 };
 
 /**
- * ✏️ METTRE À JOUR LE PROFIL UTILISATEUR
+ * ✏️ METTRE À JOUR LE PROFIL UTILISATEUR (avec rôle)
  */
 const updateUserProfile = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { name, phone, department } = req.body;
+    const { name, phone, department, role } = req.body; // ✅ Ajout de 'role'
+
+    // Construction dynamique de l'objet de mise à jour
+    const updateData = {
+      updatedAt: new Date()
+    };
+
+    // Mise à jour conditionnelle des champs fournis
+    if (name !== undefined) updateData.name = name;
+    if (phone !== undefined) updateData.phone = phone;
+    if (department !== undefined) updateData.department = department;
+    if (role !== undefined) updateData.role = role; // ✅ Ajout de la mise à jour du rôle
 
     const user = await User.findByIdAndUpdate(
       userId,
-      { 
-        $set: { 
-          name: name,
-          phone: phone,
-          department: department,
-          updatedAt: new Date()
-        } 
-      },
-      { new: true }
+      { $set: updateData },
+      { new: true, runValidators: true } // runValidators pour valider le rôle
     ).select('-password -confirmationToken');
 
     if (!user) {
@@ -656,6 +660,9 @@ const updateUserProfile = async (req, res) => {
     }
 
     console.log(`✏️ Profil mis à jour pour: ${user.email}`);
+    if (role) {
+      console.log(`🔄 Rôle changé en: ${role}`);
+    }
 
     res.json({
       success: true,
@@ -673,17 +680,21 @@ const updateUserProfile = async (req, res) => {
   }
 };
 
+
+// Dans la fonction deleteUser
+// ==================== FONCTION DE SUPPRESSION CORRIGÉE ====================
+
 const deleteUser = async (req, res) => {
   try {
-    const userIdStr = req.params.userId; // ⚠️ Attention : params.userId (pas params.id)
+    const userIdStr = req.params.userId;
     
     console.log(`\n${'='.repeat(70)}`);
     console.log(`🗑️  [DELETE USER] Tentative: ${userIdStr}`);
     console.log(`${'='.repeat(70)}`);
 
     const mongoose = require('mongoose');
-    const Incident = require('../models/Incident');      // ✅ CORRIGÉ
-    const Equipement = require('../models/Equipement');  // ✅ CORRIGÉ
+    const Incident = require('../models/Incident');
+    const Equipement = require('../models/Equipement');
     const Affectation = require('../models/Affectation');
 
     // Validation ID
@@ -704,7 +715,26 @@ const deleteUser = async (req, res) => {
       });
     }
 
-    console.log(`✅ User: ${user.name} (${user.email})`);
+    console.log(`✅ User trouvé: ${user.name} (${user.email})`);
+    console.log(`📋 Rôle brut dans la BD: "${user.role}"`);
+
+    // 🔴 PROTECTION ABSOLUE : NORMALISATION DU RÔLE
+    const roleNormalized = (user.role || '').toLowerCase().trim();
+    const isAdmin = roleNormalized === 'admin' || roleNormalized === 'administrateur';
+
+    console.log(`🔍 Rôle normalisé: "${roleNormalized}"`);
+    console.log(`🔍 Est administrateur? ${isAdmin}`);
+
+    if (isAdmin) {
+      console.log('🚫 🚫 🚫 TENTATIVE DE SUPPRESSION D\'UN ADMINISTRATEUR → REFUSÉE 🚫 🚫 🚫');
+      return res.status(403).json({
+        success: false,
+        message: 'La suppression des comptes administrateurs est strictement interdite pour des raisons de sécurité.'
+      });
+    }
+
+    // Les vérifications suivantes s'appliquent uniquement aux employés et techniciens
+    console.log(`✅ Rôle autorisé pour suppression: ${user.role}`);
 
     // 🔍 VÉRIFICATION 1: INCIDENTS
     const incidents = await Incident.find({
@@ -712,7 +742,7 @@ const deleteUser = async (req, res) => {
     });
 
     if (incidents.length > 0) {
-      console.log(`❌ BLOCAGE: ${incidents.length} incident(s)`);
+      console.log(`❌ BLOCAGE: ${incidents.length} incident(s) lié(s)`);
       return res.status(400).json({
         success: false,
         message: `Impossible de supprimer: ${incidents.length} incident(s) lié(s)`
@@ -730,44 +760,34 @@ const deleteUser = async (req, res) => {
 
     if (affectationsActives.length > 0) {
       const equipList = affectationsActives
-        .map(a => a.equipementId?.nom)
+        .map(a => a.equipementId?.nom || 'Inconnu')
+        .filter(Boolean)
         .join(', ');
       
-      console.log(`❌ BLOCAGE: ${affectationsActives.length} équipement(s)`);
+      console.log(`❌ BLOCAGE: ${affectationsActives.length} équipement(s) assigné(s)`);
       
       return res.status(400).json({
         success: false,
-        message: `Impossible de supprimer: ${affectationsActives.length} équipement(s) assigné(s) (${equipList})`
+        message: `Impossible de supprimer: ${affectationsActives.length} équipement(s) assigné(s) (${equipList || 'non spécifiés'})`
       });
     }
 
-    // 🔍 VÉRIFICATION 3: ÉQUIPEMENTS CRÉÉS
+    // 🔍 VÉRIFICATION 3: ÉQUIPEMENTS CRÉÉS PAR L'UTILISATEUR
     const equipementsCrees = await Equipement.find({ createdBy: userId });
 
     if (equipementsCrees.length > 0) {
-      console.log(`❌ BLOCAGE: ${equipementsCrees.length} équipement(s) créés`);
+      console.log(`❌ BLOCAGE: ${equipementsCrees.length} équipement(s) créés par cet utilisateur`);
       return res.status(400).json({
         success: false,
-        message: `Impossible de supprimer: ${equipementsCrees.length} équipement(s) créé(s)`
+        message: `Impossible de supprimer: ${equipementsCrees.length} équipement(s) créé(s) par cet utilisateur`
       });
     }
 
-    // ✅ VÉRIFICATION DERNIER ADMIN
-    if (user.role === 'admin') {
-      const adminCount = await User.countDocuments({ role: 'admin' });
-      if (adminCount <= 1) {
-        return res.status(400).json({
-          success: false,
-          message: 'Impossible de supprimer le dernier admin'
-        });
-      }
-    }
-
-    // ✅ SUPPRESSION
-    console.log(`✅ SUPPRESSION AUTORISÉE`);
+    // ✅ SUPPRESSION AUTORISÉE (uniquement pour employe / technicien sans dépendances)
+    console.log(`✅✅✅ SUPPRESSION AUTORISÉE pour l'utilisateur ${user.role}: ${user.name}`);
     await User.findByIdAndDelete(userId);
 
-    console.log(`✅ User "${user.name}" supprimé\n`);
+    console.log(`✅ Utilisateur "${user.name}" supprimé avec succès\n`);
 
     res.status(200).json({
       success: true,
@@ -775,14 +795,15 @@ const deleteUser = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ [DELETE] Erreur:', error);
+    console.error('❌ [DELETE USER] Erreur inattendue:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur serveur',
+      message: 'Erreur serveur lors de la suppression',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };
+
 /**
  * 🔑 CHANGER LE MOT DE PASSE
  */

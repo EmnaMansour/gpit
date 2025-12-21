@@ -1,42 +1,24 @@
-# -------------------------
-# Étape 1 : Build
-# -------------------------
-FROM node:20 AS builder
+FROM node:20-alpine
+
 WORKDIR /app
 
-# Copier package.json et tsconfig.json pour installer les dépendances
-COPY package*.json tsconfig.json ./
+# Copier les fichiers de dépendances
+COPY package*.json ./
 
-# Installer toutes les dépendances (dev et prod)
-RUN npm install
+# Installer les dépendances de production
+RUN npm install --omit=dev
 
 # Copier tout le code source
 COPY . .
 
-# Build TypeScript vers JS dans /dist
-RUN npm run build
+# Créer le dossier pour les QR codes
+RUN mkdir -p qrCodes
 
-# -------------------------
-# Étape 2 : Runtime
-# -------------------------
-FROM node:20
-WORKDIR /app
-
-# Définit le mode production
-ENV NODE_ENV=production
-
-# Copier package.json pour installer seulement les dépendances de prod
-COPY package*.json ./
-
-# Installer seulement les dépendances de production
-RUN npm install --omit=dev
-
-# Copier le build depuis l'étape builder
-COPY --from=builder /app/dist ./dist
-
-
-# Exposer le port de l'application
+# Exposer le port
 EXPOSE 8000
 
-# Commande de lancement
-CMD ["node", "dist/server.js"]
+# Variable d'environnement
+ENV NODE_ENV=production
+
+# Démarrer l'application
+CMD ["node", "server.js"]

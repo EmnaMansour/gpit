@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ArrowRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 export function PricingSection() {
   const [visibleSections, setVisibleSections] = useState(new Set())
@@ -244,12 +245,14 @@ export function PricingSection() {
             <p className="mb-10 max-w-2xl mx-auto text-gray-300 text-lg">
               Nous proposons également des solutions personnalisées pour répondre aux exigences uniques de votre entreprise.
             </p>
+            <Link to="/contact">
             <button className="group px-10 py-4 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-bold rounded-full hover:from-blue-500 hover:to-blue-400 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl hover:shadow-blue-500/25">
               <span className="flex items-center justify-center gap-2">
                 Contacter notre équipe commerciale
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </span>
             </button>
+            </Link>
           </div>
         </div>
 

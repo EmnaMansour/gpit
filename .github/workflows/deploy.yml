@@ -10,7 +10,7 @@ jobs:
     name: Build Backend (Node.js)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd backend
-          npm install
+          npm install  # ← CHANGÉ: npm install au lieu de npm ci
 
       - name: Build Backend
         run: |
@@ -36,7 +36,7 @@ jobs:
     name: Build Frontend (React)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -49,7 +49,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd frontend
-          npm install
+          npm install  # ← CHANGÉ: npm install au lieu de npm ci
 
       - name: Build Frontend
         run: |
@@ -59,11 +59,11 @@ jobs:
           CI: false
 
   deploy:
-    name: Deploy to EC2 with Docker
+    name: Déploiement sur EC2 avec Docker
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [build-backend, build-frontend]
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -78,10 +78,11 @@ jobs:
           timeout: 600s
           script: |
             set -e
-            echo "🚀 Deployment started at $(date)"
-
-            # Docker
+            echo "🚀 Starting deployment at $(date)..."
+            
+            # Installation Docker si nécessaire
             if ! command -v docker &> /dev/null; then
+              echo "🐳 Installing Docker..."
               sudo apt-get update
               sudo apt-get install -y docker.io
               sudo systemctl start docker
@@ -89,71 +90,106 @@ jobs:
             fi
 
             if ! command -v docker-compose &> /dev/null; then
-              sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" \
-                -o /usr/local/bin/docker-compose
+              echo "📦 Installing Docker Compose..."
+              sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
               sudo chmod +x /usr/local/bin/docker-compose
             fi
 
-            echo "Docker OK"
-
+            echo "✅ Docker version: $(docker --version)"
+            echo "✅ Docker Compose version: $(docker-compose --version)"
+            
             cd ~
-
-            # Clean old app
+            
+            # Cleanup
             if [ -d "gpit" ]; then
+              echo "🗑️ Removing old deployment..."
               sudo rm -rf gpit
             fi
-
+            
             # Clone repo
+            echo "📥 Cloning repository..."
             git clone https://github.com/EmnaMansour/gpit.git
             cd gpit
-
-            # Backend .env (SECURISÉ)
-            mkdir -p backend
-            cat > backend/.env << EOF
-            MONGO_URI=${{ secrets.MONGO_URI }}
+            
+            # Create environment files
+            echo "🔧 Setting up environment files..."
+            
+            # Backend .env - MongoDB ATLAS
+            cat > ./backend/.env << 'EOF'
+            MONGO_URI=mongodb+srv://emna:emna@cluster0.yq5crni.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
             PORT=8000
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            EMAIL_USER=${{ secrets.EMAIL_USER }}
-            EMAIL_PASS=${{ secrets.EMAIL_PASS }}
+            JWT_SECRET=emna
+            EMAIL_USER=emnamansour77@gmail.com
+            EMAIL_PASS=xzjcsupzgxxhupbb
             NODE_ENV=production
             EOF
-
-            echo "Environment variables created"
-
-            # Docker deploy
-            sudo docker-compose down -v --remove-orphans || true
-            sudo docker system prune -af --volumes || true
+            
+            echo "📋 Environment files created successfully"
+            
+            # Docker deployment
+            echo "🐳 Starting Docker deployment..."
+            
+            # Arrêter les containers existants
+            echo "🔻 Stopping existing containers..."
+            sudo docker-compose down -v --remove-orphans 2>/dev/null || true
+            
+            # Nettoyer Docker
+            echo "🧹 Cleaning Docker system..."
+            sudo docker system prune -af --volumes 2>/dev/null || true
+            
+            # Builder les images
+            echo "🏗️ Building Docker images..."
             sudo docker-compose build --no-cache
+            
+            # Démarrer les services
+            echo "🚀 Starting services..."
             sudo docker-compose up -d
-
-            sleep 40
-
+            
+            # Attendre le démarrage
+            echo "⏳ Waiting for services to start..."
+            sleep 45
+            
+            # Vérifier l'état
+            echo "📊 Container status:"
             sudo docker-compose ps
-
+            
             # Health checks
-            if curl -s http://localhost:8081/health > /dev/null; then
-              echo "✅ Backend OK"
+            echo "🏥 Performing health checks..."
+            
+            # Test Backend
+            if curl -s -f http://localhost:8081/health > /dev/null; then
+              echo "✅ Backend is healthy"
             else
-              echo "❌ Backend ERROR"
+              echo "⚠️ Backend health check failed"
               sudo docker-compose logs backend --tail=20
             fi
-
-            if curl -s http://localhost:5173 > /dev/null; then
-              echo "✅ Frontend OK"
+            
+            # Test Frontend
+            if curl -s -f http://localhost:5173 > /dev/null; then
+              echo "✅ Frontend is healthy"
             else
-              echo "❌ Frontend ERROR"
+              echo "⚠️ Frontend health check failed"
             fi
-
-            echo "🎉 Deployment finished successfully!"
+            
+            echo ""
+            echo "🎉 DEPLOYMENT COMPLETED SUCCESSFULLY!"
+            echo "📅 Completed at: $(date)"
+            echo "🌐 Application URLs:"
+            echo "   • Frontend: http://44.210.225.211:5173"
+            echo "   • Backend:  http://44.210.225.211:8081"
+            echo "   • Grafana:  http://44.210.225.211:3000"
 
       - name: Final Status
         if: always()
         run: |
           if [ "${{ job.status }}" == "success" ]; then
-            echo "✅ DEPLOYMENT SUCCESS"
-            echo "Frontend: http://${{ secrets.EC2_HOST }}:5173"
-            echo "Backend:  http://${{ secrets.EC2_HOST }}:8081"
-            echo "Grafana:  http://${{ secrets.EC2_HOST }}:3000"
+            echo "✅ All jobs completed successfully!"
+            echo "🎉 Your application is deployed and running!"
+            echo ""
+            echo "📱 Access your application:"
+            echo "   Frontend: http://${{ secrets.EC2_HOST }}:5173"
+            echo "   Backend:  http://${{ secrets.EC2_HOST }}:8081"
+            echo "   Grafana:  http://${{ secrets.EC2_HOST }}:3000"
           else
-            echo "❌ DEPLOYMENT FAILED"
+            echo "❌ Deployment failed - check the logs above"
           fi

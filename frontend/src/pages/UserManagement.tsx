@@ -199,117 +199,118 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, user, mode, onSu
     }
   }, [isOpen, user, mode]);
 
-  const handleSubmit = async () => {
-    if (!formData.name.trim() || !formData.email.trim()) {
-      setErrorMessage('Le nom et l\'email sont requis');
-      return;
+const handleSubmit = async () => {
+  if (!formData.name.trim() || !formData.email.trim()) {
+    setErrorMessage('Le nom et l\'email sont requis');
+    return;
+  }
+
+  const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
+  if (!emailRegex.test(formData.email.trim())) {
+    setErrorMessage('Format d\'email invalide');
+    return;
+  }
+
+  if (mode === 'add' && (!formData.password || formData.password.length < 6)) {
+    setErrorMessage('Le mot de passe doit contenir au moins 6 caractères');
+    return;
+  }
+
+  if (mode === 'add' && formData.password !== formData.confirmPassword) {
+    setErrorMessage('Les mots de passe ne correspondent pas');
+    return;
+  }
+
+  if (mode === 'edit' && formData.password && formData.password !== formData.confirmPassword) {
+    setErrorMessage('Les mots de passe ne correspondent pas');
+    return;
+  }
+
+  setIsLoading(true);
+  setErrorMessage('');
+  setSuccessMessage('');
+
+  try {
+    const apiConfig = getApiConfig();
+    
+    const requestData: any = {
+      name: formData.name.trim(),
+      email: formData.email.trim().toLowerCase(),
+      role: formData.role, // ✅ TOUJOURS inclure le rôle
+      department: formData.department.trim() || ''
+    };
+
+    // ✅ Ajout du mot de passe seulement si fourni
+    if (formData.password && formData.password.trim()) {
+      requestData.password = formData.password;
+      if (mode === 'add') {
+        requestData.confirmPassword = formData.confirmPassword;
+      }
     }
 
-    const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
-    if (!emailRegex.test(formData.email.trim())) {
-      setErrorMessage('Format d\'email invalide');
-      return;
+    let url = `${apiConfig.baseUrl}`;
+    let method: 'POST' | 'PUT' = 'POST';
+
+    if (mode === 'edit') {
+      const userId = user?._id || user?.id;
+      if (!userId) throw new Error('ID utilisateur manquant');
+      url += `${apiConfig.updateEndpoint}/${userId}`;
+      method = 'PUT'; // ✅ Ou essayez 'PATCH' si votre backend utilise PATCH
+    } else {
+      url += apiConfig.createEndpoint;
+      method = 'POST';
     }
 
-    if (mode === 'add' && (!formData.password || formData.password.length < 6)) {
-      setErrorMessage('Le mot de passe doit contenir au moins 6 caractères');
-      return;
+    const token = localStorage.getItem('authToken')?.replace(/"/g, '');
+    const headers: any = {
+      'Content-Type': 'application/json'
+    };
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
-    if (mode === 'add' && formData.password !== formData.confirmPassword) {
-      setErrorMessage('Les mots de passe ne correspondent pas');
-      return;
-    }
+    console.log('📤 Envoi des données:', { url, method, data: requestData });
 
-    if (mode === 'edit' && formData.password && formData.password !== formData.confirmPassword) {
-      setErrorMessage('Les mots de passe ne correspondent pas');
-      return;
-    }
+    const response = await fetch(url, {
+      method,
+      headers,
+      body: JSON.stringify(requestData),
+    });
 
-    setIsLoading(true);
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    try {
-      const apiConfig = getApiConfig();
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Route API non trouvée. Vérifiez que le backend est configuré correctement.');
+      }
       
-      const requestData: any = {
-        name: formData.name.trim(),
-        email: formData.email.trim().toLowerCase(),
-        role: formData.role,
-        department: formData.department.trim() || ''
-      };
-
-      if (formData.password && formData.password.trim()) {
-        requestData.password = formData.password;
-        if (mode === 'add') {
-          requestData.confirmPassword = formData.confirmPassword;
-        }
+      let errorMsg = `Erreur HTTP ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.error || errorData.message || errorMsg;
+        console.log('❌ Erreur détaillée:', errorData);
+      } catch {
+        errorMsg = `${errorMsg}: ${response.statusText}`;
       }
-
-      let url = `${apiConfig.baseUrl}`;
-      let method: 'POST' | 'PUT' = 'POST';
-
-      if (mode === 'edit') {
-        const userId = user?._id || user?.id;
-        if (!userId) throw new Error('ID utilisateur manquant');
-        url += `${apiConfig.updateEndpoint}/${userId}`;
-        method = 'PUT';
-      } else {
-        url += apiConfig.createEndpoint;
-        method = 'POST';
-      }
-
-      const token = localStorage.getItem('authToken')?.replace(/"/g, '');
-      const headers: any = {
-        'Content-Type': 'application/json'
-      };
-
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      console.log('📤 Envoi des données:', { url, method, data: requestData });
-
-      const response = await fetch(url, {
-        method,
-        headers,
-        body: JSON.stringify(requestData),
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error('Route API non trouvée. Vérifiez que le backend est configuré correctement.');
-        }
-        
-        let errorMsg = `Erreur HTTP ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorMsg = errorData.error || errorData.message || errorMsg;
-          console.log('❌ Erreur détaillée:', errorData);
-        } catch {
-          errorMsg = `${errorMsg}: ${response.statusText}`;
-        }
-        throw new Error(errorMsg);
-      }
-
-      const result = await response.json();
-      console.log('✅ Réponse serveur:', result);
-
-      setSuccessMessage(mode === 'add' ? 'Utilisateur créé avec succès!' : 'Utilisateur modifié avec succès!');
-
-      setTimeout(() => {
-        if (onSuccess) onSuccess();
-        onClose();
-      }, 1500);
-
-    } catch (error: any) {
-      console.error('❌ Erreur:', error);
-      setErrorMessage(error.message || 'Erreur lors de l\'envoi des données');
-    } finally {
-      setIsLoading(false);
+      throw new Error(errorMsg);
     }
-  };
+
+    const result = await response.json();
+    console.log('✅ Réponse serveur:', result);
+
+    setSuccessMessage(mode === 'add' ? 'Utilisateur créé avec succès!' : 'Utilisateur modifié avec succès!');
+
+    setTimeout(() => {
+      if (onSuccess) onSuccess();
+      onClose();
+    }, 1500);
+
+  } catch (error: any) {
+    console.error('❌ Erreur:', error);
+    setErrorMessage(error.message || 'Erreur lors de l\'envoi des données');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const handleInputChange = (field: keyof typeof formData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -405,15 +406,18 @@ const UserModal: React.FC<UserModalProps> = ({ isOpen, onClose, user, mode, onSu
               <div className="relative">
                 <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <select
-                  value={formData.role}
-                  onChange={(e) => handleInputChange('role', e.target.value)}
-                  className="w-full bg-gray-700/50 border border-gray-600 rounded-lg pl-10 pr-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
-                  disabled={isLoading}
-                >
-                  <option value="employe">Employé</option>
-                  <option value="technicien">Technicien</option>
-                  <option value="admin">Administrateur</option>
-                </select>
+  value={formData.role}
+  onChange={(e) => handleInputChange('role', e.target.value)}
+  className="w-full bg-gray-700/50 border border-gray-600 rounded-lg pl-10 pr-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
+  disabled={isLoading}
+>
+  <option value="employe">Employé</option>
+  <option value="technicien">Technicien</option>
+  <option value="admin">Administrateur</option>
+</select>
+
+// 🔍 VÉRIFICATION : Ajoutez ce console.log dans handleSubmit
+console.log('📤 Rôle envoyé:', formData.role); 
               </div>
             </div>
 
@@ -683,17 +687,30 @@ const UserManagement: React.FC = () => {
   };
 
 const handleDelete = async (user: User) => {
-  // Première confirmation
-  if (!window.confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur "${user.name}" ?`)) {
+  const roleDisplay = normalizeRoleForDisplay(user.role);
+
+  // 🔴 INTERDICTION TOTALE DE SUPPRIMER UN ADMIN
+ if (roleDisplay === 'admin') {
+    alert('🚫 La suppression des administrateurs est strictement interdite.');
+    return;
+  }
+  // Confirmation pour les autres rôles
+  if (!window.confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur "${user.name}" ?\n\nCette action est irréversible.`)) {
     return;
   }
 
   try {
     const apiConfig = getApiConfig();
     const userId = user._id || user.id;
+
+    if (!userId) {
+      alert('Erreur : ID de l\'utilisateur manquant.');
+      return;
+    }
+
     const token = localStorage.getItem('authToken')?.replace(/"/g, '');
-    const headers: any = {
-      'Content-Type': 'application/json'
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
     };
 
     if (token) {
@@ -702,36 +719,46 @@ const handleDelete = async (user: User) => {
 
     const url = `${apiConfig.baseUrl}${apiConfig.deleteEndpoint}/${userId}`;
 
-    console.log('🗑️ Tentative de suppression:', { url });
+    console.log('🗑️ Tentative de suppression:', { url, userId, name: user.name });
 
     const response = await fetch(url, {
       method: 'DELETE',
-      headers
+      headers,
     });
 
     const responseData = await response.json();
 
     if (response.ok) {
-      // Suppression réussie
+      // ✅ Suppression réussie
       alert(responseData.message || 'Utilisateur supprimé avec succès');
-      await loadUsers();
-      
-    } else if (response.status === 400 && responseData.linkedData) {
-      // Utilisateur a des dépendances - Afficher le modal de blocage
+      await loadUsers(); // Rafraîchir la liste
+    } 
+    else if (response.status === 400 && responseData.linkedData) {
+      // ❌ Dépendances bloquantes (incidents, équipements, etc.)
       setDeleteModal({
         isOpen: true,
         user,
-        linkedData: responseData.linkedData
+        linkedData: {
+          incidents: responseData.linkedData?.incidents || 0,
+          equipements: responseData.linkedData?.equipements || 0,
+          // Tu peux ajouter d'autres champs si le backend en renvoie
+        },
       });
-      
-    } else {
-      // Autre erreur
-      throw new Error(responseData.error || `Erreur HTTP ${response.status}`);
+    } 
+    else if (response.status === 403 && responseData.message?.includes('administrateurs')) {
+      // Cas improbable (mais au cas où), si le backend renvoie 403 pour admin
+      alert('🚫 Action interdite : les administrateurs ne peuvent pas être supprimés.');
+    } 
+    else {
+      // ❌ Autres erreurs (serveur, réseau, etc.)
+      const errorMessage = responseData.message || responseData.error || 'Erreur inconnue lors de la suppression';
+      alert(`❌ Échec de la suppression :\n${errorMessage}`);
+      console.error('Erreur suppression:', responseData);
     }
-    
+
   } catch (err: any) {
-    console.error('❌ Erreur handleDelete:', err);
-    alert(err.message || "Erreur lors de la suppression");
+    console.error('❌ Erreur réseau ou inattendue dans handleDelete:', err);
+    alert('Erreur technique lors de la suppression. Vérifiez votre connexion ou réessayez plus tard.');
   }
 };
 
@@ -994,13 +1021,22 @@ const handleDelete = async (user: User) => {
                             <Edit className="h-4 w-4" />
                           </button>
                           
-                          <button 
-                            onClick={() => handleDelete(user)} 
-                            className="p-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-lg text-red-400 hover:text-red-300 transition-all duration-200" 
-                            title="Supprimer"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {normalizeRoleForDisplay(user.role) === 'Administrateur' ? (
+  <div 
+    className="w-10 h-10 flex items-center justify-center" 
+    title="Les administrateurs ne peuvent pas être supprimés"
+  >
+    <Shield className="h-4 w-4 text-purple-400" />
+  </div>
+) : (
+  <button 
+    onClick={() => handleDelete(user)} 
+    className="p-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-lg text-red-400 hover:text-red-300 transition-all duration-200" 
+    title="Supprimer"
+  >
+    <Trash2 className="h-4 w-4" />
+  </button>
+)}
                         </div>
                       </td>
                     </tr>
