@@ -1,16 +1,18 @@
 {
   "compilerOptions": {
-    "target": "es5",
-    "lib": ["es5", "dom"],
-    "types": ["cypress"],
-    "module": "commonjs",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "types": ["cypress", "node"],
+    "module": "ESNext",
     "strict": true,
     "esModuleInterop": true,
+
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node", "jest"]
   },
   "include": [
-    "**/*.ts",
-    "cypress/**/*.ts"
-, "cypress/support/component.js"  ]
+    "cypress/**/*.ts",
+    "src/**/*.ts"
+  ]
 }
