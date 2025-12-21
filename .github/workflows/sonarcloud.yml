@@ -1,71 +1,72 @@
-name: Cypress Coverage + SonarCloud
+name: CI/CD with Cypress Coverage and SonarCloud
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
+
+env:
+  MONGO_URI: ${{ secrets.MONGO_URI }}
+  JWT_SECRET: ${{ secrets.JWT_SECRET }}
+  EMAIL_USER: ${{ secrets.EMAIL_USER }}
+  EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
 jobs:
-  sonarcloud:
+  build-test-sonar:
     runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:6
+        ports:
+          - 27017:27017
+        options: --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'" --health-interval 10s --health-timeout 5s --health-retries 5
 
     steps:
-      # 1️⃣ Checkout repo
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      # 2️⃣ Setup Node.js
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 20
+        cache: 'npm'
 
-      # 3️⃣ Install dependencies
-      - name: Install dependencies
-        run: npm ci
+    - name: Install dependencies
+      run: |
+        cd backend && npm ci
+        cd ../frontend && npm ci
 
-      # 4️⃣ Start Vite server in background
-      - name: Start Vite server
-        run: |
-          npm run dev -- --host 0.0.0.0 --port 5173 &
-          echo "Vite started in background..."
+    - name: Start backend instrumented
+      run: |
+        cd backend
+        npm run start:instrumented & 
+        echo $! > backend.pid
+        sleep 10
 
-      # 5️⃣ Wait for server
-      - name: Wait for Vite server
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 5
-          max_attempts: 10
-          command: npx wait-on http://localhost:5173
+    - name: Run Cypress Tests with Coverage
+      run: |
+        cd frontend
+        npx cypress run
+        cd ../backend
+        npx nyc report --reporter=lcov --report-dir=coverage
+        # Fix paths for SonarCloud
+        sed -i 's|SF:.*/src/|SF:src/|g' coverage/lcov.info
 
-      # 6️⃣ Run Cypress tests with coverage
-      - name: Run Cypress tests
-        env:
-          CYPRESS_COVERAGE: 1
-        run: npx cypress run
+    - name: Stop backend
+      run: |
+        kill $(cat backend.pid) || true
 
-      # 7️⃣ Generate LCOV report
-      - name: Generate LCOV report
-        run: |
-          npx nyc report --reporter=lcov --report-dir=coverage
-          # Corriger les chemins pour SonarCloud
-          sed -i 's|SF:.*/src/|SF:src/|g' coverage/lcov.info
-          head -20 coverage/lcov.info
-
-      # 8️⃣ SonarCloud scan
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          args: >
-            -Dsonar.projectKey=EmnaMansour_gpit
-            -Dsonar.organization=emnamansour
-            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-            -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info
-            -Dsonar.sourceEncoding=UTF-8
-            -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,cypress/**,jest-tests/**,coverage/**
+    - name: SonarCloud Scan
+      uses: sonarsource/sonarcloud-github-action@v2
+      with:
+        organization: ${{ secrets.SONAR_ORG }}
+        projectKey: ${{ secrets.SONAR_PROJECT_KEY }}
+        token: ${{ secrets.SONAR_TOKEN }}
+        extraProperties: |
+          sonar.sources=frontend/src,backend/src
+          sonar.tests=frontend/src,backend/src
+          sonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info
+          sonar.typescript.lcov.reportPaths=backend/coverage/lcov.info
+          sonar.typescript.lcov.reportPaths=frontend/coverage/lcov.info
