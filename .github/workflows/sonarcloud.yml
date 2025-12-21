@@ -1,72 +1,179 @@
-name: CI/CD with Cypress Coverage and SonarCloud
+name: CI/CD Pipeline - Cypress + Coverage + SonarCloud + EC2 Deployment
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-
-env:
-  MONGO_URI: ${{ secrets.MONGO_URI }}
-  JWT_SECRET: ${{ secrets.JWT_SECRET }}
-  EMAIL_USER: ${{ secrets.EMAIL_USER }}
-  EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    branches: [ main ]
 
 jobs:
-  build-test-sonar:
+  cypress-sonarcloud-deploy:
     runs-on: ubuntu-latest
-    services:
-      mongo:
-        image: mongo:6
-        ports:
-          - 27017:27017
-        options: --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'" --health-interval 10s --health-timeout 5s --health-retries 5
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      # 1️⃣ Checkout repo
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: 20
-        cache: 'npm'
+      # 2️⃣ Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
 
-    - name: Install dependencies
-      run: |
-        cd backend && npm ci
-        cd ../frontend && npm ci
+      # 3️⃣ Install dependencies (frontend + backend)
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd backend && npm ci
 
-    - name: Start backend instrumented
-      run: |
-        cd backend
-        npm run start:instrumented & 
-        echo $! > backend.pid
-        sleep 10
+      # 4️⃣ Setup Cypress code coverage
+      - name: Setup Cypress coverage
+        run: |
+          npm install --save-dev @cypress/code-coverage nyc
+          cd backend && npm install --save-dev nyc
 
-    - name: Run Cypress Tests with Coverage
-      run: |
-        cd frontend
-        npx cypress run
-        cd ../backend
-        npx nyc report --reporter=lcov --report-dir=coverage
-        # Fix paths for SonarCloud
-        sed -i 's|SF:.*/src/|SF:src/|g' coverage/lcov.info
+      # 5️⃣ Start frontend Vite server
+      - name: Start Vite server
+        run: |
+          npm run dev -- --host 0.0.0.0 --port 5173 &
+          echo "Vite started in background..."
 
-    - name: Stop backend
-      run: |
-        kill $(cat backend.pid) || true
+      # 6️⃣ Wait for Vite to be ready
+      - name: Wait for Vite server
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 10
+          command: npx wait-on http://localhost:5173
 
-    - name: SonarCloud Scan
-      uses: sonarsource/sonarcloud-github-action@v2
-      with:
-        organization: ${{ secrets.SONAR_ORG }}
-        projectKey: ${{ secrets.SONAR_PROJECT_KEY }}
-        token: ${{ secrets.SONAR_TOKEN }}
-        extraProperties: |
-          sonar.sources=frontend/src,backend/src
-          sonar.tests=frontend/src,backend/src
-          sonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info
-          sonar.typescript.lcov.reportPaths=backend/coverage/lcov.info
-          sonar.typescript.lcov.reportPaths=frontend/coverage/lcov.info
+      # 7️⃣ Run Cypress tests with coverage
+      - name: Run Cypress tests
+        env:
+          CYPRESS_COVERAGE: 1
+        run: npx cypress run
+
+      # 8️⃣ Run backend tests with coverage
+      - name: Run backend tests with coverage
+        run: |
+          cd backend
+          npx nyc --reporter=lcov --report-dir=coverage npm test
+
+      # 9️⃣ Generate LCOV report (frontend)
+      - name: Generate frontend LCOV
+        run: |
+          npx nyc report --reporter=lcov --report-dir=frontend/coverage
+          sed -i 's|SF:.*/src/|SF:src/|g' frontend/coverage/lcov.info
+          head -20 frontend/coverage/lcov.info
+
+      # 🔟 Generate LCOV report (backend)
+      - name: Generate backend LCOV
+        run: |
+          sed -i 's|SF:.*/backend/src/|SF:backend/src/|g' backend/coverage/lcov.info
+          head -20 backend/coverage/lcov.info
+
+      # 1️⃣1️⃣ SonarCloud scan
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=EmnaMansour_gpit
+            -Dsonar.organization=emnamansour
+            -Dsonar.sources=frontend/src,backend/src
+            -Dsonar.tests=frontend/src,backend/src
+            -Dsonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info,backend/coverage/lcov.info
+            -Dsonar.typescript.lcov.reportPaths=frontend/coverage/lcov.info,backend/coverage/lcov.info
+            -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,cypress/**,jest-tests/**,coverage/**
+            -Dsonar.sourceEncoding=UTF-8
+
+      # 1️⃣2️⃣ Deploy to EC2 via SSH
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.GPIT_KEY }}
+          port: 22
+          timeout: 600s
+          script: |
+            set -e
+            echo "🚀 Starting deployment at $(date)..."
+
+            # Installer Docker si nécessaire
+            if ! command -v docker &> /dev/null; then
+              echo "🐳 Installing Docker..."
+              sudo apt-get update
+              sudo apt-get install -y docker.io
+              sudo systemctl start docker
+              sudo systemctl enable docker
+            fi
+
+            if ! command -v docker-compose &> /dev/null; then
+              echo "📦 Installing Docker Compose..."
+              sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+            fi
+
+            echo "✅ Docker version: $(docker --version)"
+            echo "✅ Docker Compose version: $(docker-compose --version)"
+
+            cd ~
+
+            # Cleanup
+            if [ -d "gpit" ]; then
+              echo "🗑️ Removing old deployment..."
+              sudo rm -rf gpit
+            fi
+
+            # Clone repo
+            echo "📥 Cloning repository..."
+            git clone https://github.com/EmnaMansour/gpit.git
+            cd gpit
+
+            # Create backend .env
+            echo "🔧 Setting up environment files..."
+            cat > ./backend/.env << 'EOF'
+MONGO_URI=${{ secrets.MONGO_URI }}
+PORT=8000
+JWT_SECRET=${{ secrets.JWT_SECRET }}
+EMAIL_USER=${{ secrets.EMAIL_USER }}
+EMAIL_PASS=${{ secrets.EMAIL_PASS }}
+NODE_ENV=production
+EOF
+
+            echo "📋 Environment files created successfully"
+
+            # Docker deployment
+            echo "🐳 Starting Docker deployment..."
+            sudo docker-compose down -v --remove-orphans || true
+            sudo docker system prune -af --volumes || true
+            sudo docker-compose build --no-cache
+            sudo docker-compose up -d
+
+            echo "⏳ Waiting for services to start..."
+            sleep 45
+
+            echo "📊 Container status:"
+            sudo docker-compose ps
+
+            echo "🏥 Performing health checks..."
+            if curl -s -f http://localhost:8081/health > /dev/null; then
+              echo "✅ Backend is healthy"
+            else
+              echo "⚠️ Backend health check failed"
+              sudo docker-compose logs backend --tail=20
+            fi
+
+            if curl -s -f http://localhost:5173 > /dev/null; then
+              echo "✅ Frontend is healthy"
+            else
+              echo "⚠️ Frontend health check failed"
+            fi
+
+            echo "🎉 DEPLOYMENT COMPLETED SUCCESSFULLY!"
+            echo "📅 Completed at: $(date)"
