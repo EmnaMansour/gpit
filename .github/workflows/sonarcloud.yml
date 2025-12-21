@@ -1,4 +1,4 @@
-name: CI/CD Pipeline - SonarCloud + Cypress + Deployment
+name: CI/CD Pipeline - Cypress + Coverage + SonarCloud + Deployment
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  sonarcloud:
+  cypress-sonarcloud:
     runs-on: ubuntu-latest
     steps:
       # 1️⃣ Checkout repo
@@ -26,13 +26,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # 4️⃣ Start Vite server in background
+      # 4️⃣ Install Cypress code coverage plugin
+      - name: Setup Cypress code coverage
+        run: |
+          npm install --save-dev @cypress/code-coverage nyc
+
+      # 5️⃣ Start Vite server in background
       - name: Start Vite server
         run: |
           npm run dev -- --host 0.0.0.0 --port 5173 &
           echo "Vite started in background..."
 
-      # 5️⃣ Wait for Vite server to be ready
+      # 6️⃣ Wait for Vite server
       - name: Wait for Vite server
         uses: nick-fields/retry@v3
         with:
@@ -40,20 +45,22 @@ jobs:
           max_attempts: 10
           command: npx wait-on http://localhost:5173
 
-      # 6️⃣ Run Cypress tests with coverage
+      # 7️⃣ Run Cypress tests with coverage
       - name: Run Cypress tests
-        run: npx cypress run
-        continue-on-error: false
+        env:
+          CYPRESS_COVERAGE: 1
+        run: |
+          npx cypress run
 
-      # 7️⃣ Generate LCOV report and fix paths for SonarCloud
-      - name: Generate and fix LCOV report
+      # 8️⃣ Generate LCOV report and fix paths
+      - name: Generate LCOV report
         run: |
           npx nyc report --reporter=lcov --report-dir=coverage
-          sed -i 's|/github/workspace/||g' coverage/lcov.info || true
-          sed -i 's|SF:/github/workspace/|SF:|g' coverage/lcov.info || true
+          # Corrige chemins pour SonarCloud (adapte selon ton dossier frontend)
+          sed -i 's|SF:.*/src/|SF:src/|g' coverage/lcov.info
           head -20 coverage/lcov.info
 
-      # 8️⃣ SonarCloud scan
+      # 9️⃣ SonarCloud scan
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
@@ -68,12 +75,12 @@ jobs:
             -Dsonar.sourceEncoding=UTF-8
             -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,cypress/**,jest-tests/**,coverage/**
 
-      # 9️⃣ Deploy to EC2 via SSH
+      #  🔟 Optional: Deploy to EC2 via SSH
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
-          username: ubuntu                 # remplace par ton user sur EC2
+          username: ubuntu             # remplace par ton user
           key: ${{ secrets.GPIT_KEY }}
           port: 22
           script: |
@@ -85,7 +92,7 @@ jobs:
             docker-compose up -d
             echo "🎉 Deployment completed successfully!"
 
-      # 🔴 Fail job if any previous step failed
+      # 🔴 Fail job if previous steps failed
       - name: Fail if previous steps failed
         if: ${{ failure() }}
         run: |
