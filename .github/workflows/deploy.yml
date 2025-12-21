@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd backend
-          npm install  # ← CHANGÉ: npm install au lieu de npm ci
+          npm install
 
       - name: Build Backend
         run: |
@@ -49,7 +49,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd frontend
-          npm install  # ← CHANGÉ: npm install au lieu de npm ci
+          npm install
 
       - name: Build Frontend
         run: |
@@ -110,6 +110,14 @@ jobs:
             echo "📥 Cloning repository..."
             git clone https://github.com/EmnaMansour/gpit.git
             cd gpit
+            
+            # ⭐ NOUVELLE SECTION: Configuration automatique de l'API URL ⭐
+            echo "🔧 Configuring frontend API URL for EC2..."
+            cd frontend
+            # Remplacer localhost par l'IP EC2 dans tous les fichiers JS/JSX
+            find src -type f \( -name "*.jsx" -o -name "*.js" -o -name "*.tsx" -o -name "*.ts" \) -exec sed -i 's|http://localhost:8000|http://44.210.225.211:8000|g' {} +
+            echo "✅ API URL configured successfully"
+            cd ..
             
             # Create environment files
             echo "🔧 Setting up environment files..."
