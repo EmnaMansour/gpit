@@ -1,4 +1,4 @@
-name: SonarCloud Scan
+name: CI/CD Pipeline - SonarCloud + Cypress + Deployment
 
 on:
   push:
@@ -10,24 +10,29 @@ jobs:
   sonarcloud:
     runs-on: ubuntu-latest
     steps:
+      # 1️⃣ Checkout repo
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      # 2️⃣ Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
+      # 3️⃣ Install dependencies
       - name: Install dependencies
         run: npm ci
 
-      - name: Start Vite server in background
+      # 4️⃣ Start Vite server in background
+      - name: Start Vite server
         run: |
           npm run dev -- --host 0.0.0.0 --port 5173 &
           echo "Vite started in background..."
 
+      # 5️⃣ Wait for Vite server to be ready
       - name: Wait for Vite server
         uses: nick-fields/retry@v3
         with:
@@ -35,11 +40,12 @@ jobs:
           max_attempts: 10
           command: npx wait-on http://localhost:5173
 
-      - name: Run Cypress tests with coverage
-        run: |
-          npx cypress run
-        continue-on-error: false   # échoue ici si Cypress échoue
+      # 6️⃣ Run Cypress tests with coverage
+      - name: Run Cypress tests
+        run: npx cypress run
+        continue-on-error: false
 
+      # 7️⃣ Generate LCOV report and fix paths for SonarCloud
       - name: Generate and fix LCOV report
         run: |
           npx nyc report --reporter=lcov --report-dir=coverage
@@ -47,6 +53,7 @@ jobs:
           sed -i 's|SF:/github/workspace/|SF:|g' coverage/lcov.info || true
           head -20 coverage/lcov.info
 
+      # 8️⃣ SonarCloud scan
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
@@ -61,8 +68,26 @@ jobs:
             -Dsonar.sourceEncoding=UTF-8
             -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,cypress/**,jest-tests/**,coverage/**
 
+      # 9️⃣ Deploy to EC2 via SSH
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu                 # remplace par ton user sur EC2
+          key: ${{ secrets.GPIT_KEY }}
+          port: 22
+          script: |
+            echo "🚀 Connected to EC2 successfully!"
+            cd ~/gpit || git clone https://github.com/EmnaMansour/gpit.git ~/gpit && cd ~/gpit
+            docker-compose down -v --remove-orphans || true
+            docker system prune -af --volumes || true
+            docker-compose build --no-cache
+            docker-compose up -d
+            echo "🎉 Deployment completed successfully!"
+
+      # 🔴 Fail job if any previous step failed
       - name: Fail if previous steps failed
         if: ${{ failure() }}
         run: |
-          echo "❌ Deployment failed - check the logs above"
+          echo "❌ CI/CD pipeline failed - check logs above"
           exit 1
