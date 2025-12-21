@@ -1,4 +1,4 @@
-name: CI/CD Pipeline - Cypress + Coverage + SonarCloud + Deployment
+name: Cypress Coverage + SonarCloud
 
 on:
   push:
@@ -7,8 +7,9 @@ on:
     branches: [ main ]
 
 jobs:
-  cypress-sonarcloud:
+  sonarcloud:
     runs-on: ubuntu-latest
+
     steps:
       # 1️⃣ Checkout repo
       - uses: actions/checkout@v4
@@ -26,18 +27,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # 4️⃣ Install Cypress code coverage plugin
-      - name: Setup Cypress code coverage
-        run: |
-          npm install --save-dev @cypress/code-coverage nyc
-
-      # 5️⃣ Start Vite server in background
+      # 4️⃣ Start Vite server in background
       - name: Start Vite server
         run: |
           npm run dev -- --host 0.0.0.0 --port 5173 &
           echo "Vite started in background..."
 
-      # 6️⃣ Wait for Vite server
+      # 5️⃣ Wait for server
       - name: Wait for Vite server
         uses: nick-fields/retry@v3
         with:
@@ -45,22 +41,21 @@ jobs:
           max_attempts: 10
           command: npx wait-on http://localhost:5173
 
-      # 7️⃣ Run Cypress tests with coverage
+      # 6️⃣ Run Cypress tests with coverage
       - name: Run Cypress tests
         env:
           CYPRESS_COVERAGE: 1
-        run: |
-          npx cypress run
+        run: npx cypress run
 
-      # 8️⃣ Generate LCOV report and fix paths
+      # 7️⃣ Generate LCOV report
       - name: Generate LCOV report
         run: |
           npx nyc report --reporter=lcov --report-dir=coverage
-          # Corrige chemins pour SonarCloud (adapte selon ton dossier frontend)
+          # Corriger les chemins pour SonarCloud
           sed -i 's|SF:.*/src/|SF:src/|g' coverage/lcov.info
           head -20 coverage/lcov.info
 
-      # 9️⃣ SonarCloud scan
+      # 8️⃣ SonarCloud scan
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
@@ -74,27 +69,3 @@ jobs:
             -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info
             -Dsonar.sourceEncoding=UTF-8
             -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,cypress/**,jest-tests/**,coverage/**
-
-      #  🔟 Optional: Deploy to EC2 via SSH
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu             # remplace par ton user
-          key: ${{ secrets.GPIT_KEY }}
-          port: 22
-          script: |
-            echo "🚀 Connected to EC2 successfully!"
-            cd ~/gpit || git clone https://github.com/EmnaMansour/gpit.git ~/gpit && cd ~/gpit
-            docker-compose down -v --remove-orphans || true
-            docker system prune -af --volumes || true
-            docker-compose build --no-cache
-            docker-compose up -d
-            echo "🎉 Deployment completed successfully!"
-
-      # 🔴 Fail job if previous steps failed
-      - name: Fail if previous steps failed
-        if: ${{ failure() }}
-        run: |
-          echo "❌ CI/CD pipeline failed - check logs above"
-          exit 1
