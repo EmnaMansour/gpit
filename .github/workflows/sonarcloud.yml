@@ -1,0 +1,63 @@
+name: SonarCloud Scan
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  sonarcloud:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4  # v4 est plus récente et stable
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20  # ou ta version
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start Vite server in background
+        run: |
+          npm run dev -- --host 0.0.0.0 --port 5173 &
+          echo "Vite started in background..."
+
+      - name: Wait for Vite server
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 10
+          command: npx wait-on http://localhost:5173
+
+      - name: Run Cypress tests with coverage
+        run: |
+          npx cypress run
+          echo "Cypress finished"
+
+      - name: Generate and fix LCOV report
+        run: |
+          npx nyc report --reporter=lcov --report-dir=coverage
+          # Corrige les chemins absolus pour SonarCloud
+          sed -i 's|/github/workspace/||g' coverage/lcov.info || true
+          sed -i 's|SF:/github/workspace/|SF:|g' coverage/lcov.info || true
+          cat coverage/lcov.info | head -20  # Pour voir si c'est bien rempli
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=EmnaMansour_gpit
+            -Dsonar.organization=emnamansour
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.sourceEncoding=UTF-8
+            -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,cypress/**,jest-tests/**,coverage/**
