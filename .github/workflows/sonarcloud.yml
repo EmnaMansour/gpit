@@ -10,14 +10,14 @@ jobs:
   sonarcloud:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4  # v4 est plus récente et stable
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20  # ou ta version
+          node-version: 20
           cache: 'npm'
 
       - name: Install dependencies
@@ -38,15 +38,14 @@ jobs:
       - name: Run Cypress tests with coverage
         run: |
           npx cypress run
-          echo "Cypress finished"
+        continue-on-error: false   # échoue ici si Cypress échoue
 
       - name: Generate and fix LCOV report
         run: |
           npx nyc report --reporter=lcov --report-dir=coverage
-          # Corrige les chemins absolus pour SonarCloud
           sed -i 's|/github/workspace/||g' coverage/lcov.info || true
           sed -i 's|SF:/github/workspace/|SF:|g' coverage/lcov.info || true
-          cat coverage/lcov.info | head -20  # Pour voir si c'est bien rempli
+          head -20 coverage/lcov.info
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
@@ -61,3 +60,9 @@ jobs:
             -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info
             -Dsonar.sourceEncoding=UTF-8
             -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,cypress/**,jest-tests/**,coverage/**
+
+      - name: Fail if previous steps failed
+        if: ${{ failure() }}
+        run: |
+          echo "❌ Deployment failed - check the logs above"
+          exit 1
